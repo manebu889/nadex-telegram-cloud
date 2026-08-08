@@ -6,5 +6,5 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-  volumes:
-    - /mnt/hdd/telegram-uploads/:/watch_dir
+    volumes:
+      - /mnt/hdd/telegram-uploads/:/watch_dir
