@@ -12,7 +12,6 @@ const TOPIC_PICTURES = parseInt(process.env.TOPIC_PICTURES);
 const TOPIC_PROJECT = parseInt(process.env.TOPIC_PROJECT);
 const TOPIC_DOCUMENT = parseInt(process.env.TOPIC_DOCUMENT);
 
-// Database sederhana berbasis JSON untuk menyimpan metadata dan label file
 const DB_FILE = path.join(WATCH_DIR, 'db.json');
 
 if (!BOT_TOKEN || !CHAT_ID || !TOPIC_GENERAL) {
@@ -66,58 +65,38 @@ async function downloadFile(url, dest) {
   });
 }
 
-// ================= FITUR FIND & PAGINATION =================
+// ================= FITUR FIND (List & Paginasi) =================
 async function sendPage(ctx, results, label, page) {
   const ITEMS_PER_PAGE = 5;
   const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE);
   const startIndex = (page - 1) * ITEMS_PER_PAGE;
   const paginated = results.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   
-  // Ambil informasi thread/topik untuk membalas di kamar yang tepat
   const replyOpts = {
     message_thread_id: ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id
   };
 
-  // Kirim setiap file yang masuk dalam halaman ini
+  const keyboard = [];
+  
+  // Buat tombol untuk setiap file (satu tombol memakan satu baris)
   for (const item of paginated) {
-     const sendOptions = { 
-       caption: `📁 ${item.fileName}\n🏷 Label: ${item.label}`,
-       ...replyOpts
-     };
-     
-     try {
-       if (item.type === 'photo') {
-         await ctx.telegram.sendPhoto(ctx.chat.id, item.fileId, sendOptions);
-       } else if (item.type === 'video') {
-         await ctx.telegram.sendVideo(ctx.chat.id, item.fileId, sendOptions);
-       } else {
-         await ctx.telegram.sendDocument(ctx.chat.id, item.fileId, sendOptions);
-       }
-     } catch (err) {
-       console.error(`Gagal mengirim file ${item.fileName}:`, err.message);
-     }
+     keyboard.push([Markup.button.callback(`📥 Unduh: ${item.fileName}`, `dl_${item.fileName}`)]);
   }
   
-  // Kirim tombol navigasi paginasi jika halamannya lebih dari 1
-  if (totalPages > 1) {
-     const buttons = [];
-     // Batasi label 20 karakter agar callback_data tidak melebih batas limit Telegram
-     const shortLabel = label.substring(0, 20); 
-     
-     if (page > 1) buttons.push(Markup.button.callback('⬅️ Prev', `p_${page - 1}_${shortLabel}`));
-     if (page < totalPages) buttons.push(Markup.button.callback('Next ➡️', `p_${page + 1}_${shortLabel}`));
-     
-     await ctx.telegram.sendMessage(
-       ctx.chat.id, 
-       `Menampilkan hal ${page}/${totalPages} (Total ${results.length} file untuk label '${label}')`, 
-       { ...replyOpts, ...Markup.inlineKeyboard([buttons]) }
-     );
+  // Buat tombol navigasi Prev/Next di baris paling bawah
+  const navButtons = [];
+  const shortLabel = label.substring(0, 20); 
+  if (page > 1) navButtons.push(Markup.button.callback('⬅️ Prev', `p_${page - 1}_${shortLabel}`));
+  if (page < totalPages) navButtons.push(Markup.button.callback('Next ➡️', `p_${page + 1}_${shortLabel}`));
+  if (navButtons.length > 0) keyboard.push(navButtons);
+
+  const textMsg = `🔍 Ditemukan **${results.length}** file untuk label '*${label}*'\nMenampilkan hal ${page}/${totalPages}.\n\n*Silakan klik file di bawah ini untuk memanggilnya:*`;
+
+  // Jika ini adalah event dari tombol (callback), cukup ubah teks pesannya agar tidak menuhi chat
+  if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('p_')) {
+    await ctx.editMessageText(textMsg, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) }).catch(()=>{});
   } else {
-     await ctx.telegram.sendMessage(
-       ctx.chat.id, 
-       `Total ${results.length} file ditemukan untuk label '${label}'.`, 
-       replyOpts
-     );
+    await ctx.telegram.sendMessage(ctx.chat.id, textMsg, { parse_mode: 'Markdown', ...replyOpts, ...Markup.inlineKeyboard(keyboard) });
   }
 }
 
@@ -149,15 +128,45 @@ bot.action(/^p_(\d+)_(.+)$/, async (ctx) => {
   const results = db.filter(item => item.label && item.label.includes(labelToFind));
   
   await ctx.answerCbQuery();
-  await ctx.deleteMessage().catch(()=> {}); // Hapus pesan paginasi lama agar rapi
-  
   if (results.length > 0) {
     await sendPage(ctx, results, labelToFind, page);
   }
 });
 
+// Listener Tombol Unduh File
+bot.action(/^dl_(.+)$/, async (ctx) => {
+  const fileName = ctx.match[1];
+  const db = readDB();
+  const item = db.find(x => x.fileName === fileName);
+  
+  await ctx.answerCbQuery("Memanggil file... 🚀");
+  
+  if (!item) {
+    return ctx.reply(`❌ File ${fileName} sudah tidak ada di database.`, { message_thread_id: ctx.callbackQuery.message.message_thread_id });
+  }
+
+  const sendOptions = { 
+    caption: `📁 ${item.fileName}\n🏷 Label: ${item.label}`,
+    message_thread_id: ctx.callbackQuery.message.message_thread_id
+  };
+  
+  try {
+    if (item.type === 'photo') {
+      await ctx.telegram.sendPhoto(ctx.chat.id, item.fileId, sendOptions);
+    } else if (item.type === 'video') {
+      await ctx.telegram.sendVideo(ctx.chat.id, item.fileId, sendOptions);
+    } else {
+      await ctx.telegram.sendDocument(ctx.chat.id, item.fileId, sendOptions);
+    }
+  } catch (err) {
+    console.error(`Gagal mengirim file ${item.fileName}:`, err.message);
+  }
+});
+
 
 // ================= CORE UPLOAD & SORTER =================
+const mediaGroupLabels = {};
+
 bot.on('message', async (ctx) => {
   try {
     const msg = ctx.message;
@@ -180,11 +189,12 @@ bot.on('message', async (ctx) => {
       fileType = 'document';
     } else if (msg.photo) {
       fileId = msg.photo[msg.photo.length - 1].file_id;
-      fileName = `photo_${Date.now()}.jpg`; 
+      // Gunakan message_id agar nama file 100% unik meskipun di-upload bersamaan
+      fileName = `photo_${msg.message_id}.jpg`; 
       fileType = 'photo';
     } else if (msg.video) {
       fileId = msg.video.file_id;
-      fileName = msg.video.file_name || `video_${Date.now()}.mp4`;
+      fileName = msg.video.file_name || `video_${msg.message_id}.mp4`;
       fileType = 'video';
     }
 
@@ -200,8 +210,17 @@ bot.on('message', async (ctx) => {
     const destPath = path.join(WATCH_DIR, fileName);
     await downloadFile(fileLink.href, destPath);
 
-    // Ambil Label dari Caption foto/dokumen saat di-upload
-    const label = (msg.caption || '').trim().toLowerCase();
+    // Ambil Label dari Caption. Jika file ini bagian dari Album (Media Group):
+    let label = (msg.caption || '').trim().toLowerCase();
+    
+    if (msg.media_group_id) {
+      if (label) {
+        mediaGroupLabels[msg.media_group_id] = label;
+        setTimeout(() => { delete mediaGroupLabels[msg.media_group_id]; }, 600000);
+      } else if (mediaGroupLabels[msg.media_group_id]) {
+        label = mediaGroupLabels[msg.media_group_id];
+      }
+    }
 
     const targetTopicId = getTopicIdByExtension(fileName);
 
@@ -219,9 +238,11 @@ bot.on('message', async (ctx) => {
         // Hapus pesan asli
         await ctx.telegram.deleteMessage(CHAT_ID, msg.message_id).catch(()=>{});
         
-        const replyOpts = threadId ? { message_thread_id: threadId } : {};
-        const lblMsg = label ? ` (Label: ${label})` : ' (Tanpa Label)';
-        await ctx.telegram.sendMessage(CHAT_ID, `✅ File dipindahkan ke topik sortir & disimpan di STB.${lblMsg}`, replyOpts);
+        if (!msg.media_group_id || (msg.media_group_id && msg.caption)) {
+          const replyOpts = threadId ? { message_thread_id: threadId } : {};
+          const lblMsg = label ? ` (Label: ${label})` : ' (Tanpa Label)';
+          await ctx.telegram.sendMessage(CHAT_ID, `✅ File dipindahkan ke topik & disimpan di STB.${lblMsg}`, replyOpts);
+        }
         
       } catch (err) {
         console.error(`[ERROR] Gagal memproses: ${err.message}`);
@@ -231,9 +252,11 @@ bot.on('message', async (ctx) => {
       db.push({ fileId, fileName, type: fileType, label, topicId: threadId });
       saveDB(db);
 
-      const replyOpts = { reply_to_message_id: msg.message_id };
-      if (threadId) replyOpts.message_thread_id = threadId;
-      await ctx.telegram.sendMessage(CHAT_ID, `💾 Tersimpan di STB (Tanpa sortir).`, replyOpts);
+      if (!msg.media_group_id || (msg.media_group_id && msg.caption)) {
+        const replyOpts = { reply_to_message_id: msg.message_id };
+        if (threadId) replyOpts.message_thread_id = threadId;
+        await ctx.telegram.sendMessage(CHAT_ID, `💾 Tersimpan di STB (Tanpa sortir).`, replyOpts);
+      }
     }
   } catch (error) {
     console.error(`[ERROR UMUM] Terjadi kesalahan:`, error.message);
@@ -241,7 +264,7 @@ bot.on('message', async (ctx) => {
 });
 
 bot.launch().then(() => {
-    console.log("[INFO] Bot Telegram Berjalan (Dengan Labeling & Paginasi)!");
+    console.log("[INFO] Bot Telegram Berjalan (Dengan Labeling List & Paginasi)!");
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
