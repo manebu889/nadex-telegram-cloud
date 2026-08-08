@@ -123,19 +123,20 @@ bot.on('message', async (ctx) => {
           message_thread_id: targetTopicId
         });
         console.log(`[SORTIR] Berhasil disalin ke Topik ID: ${targetTopicId}`);
-      } catch (err) {
-        console.error(`[ERROR SORTIR] Gagal menyalin ke Topik ID ${targetTopicId}. Pastikan ID topik tersebut benar di file .env! Pesan asli Telegram: ${err.message}`);
-      }
-      
-      // Memberi reaksi konfirmasi di pesan asli
-      try {
-        const replyOptions = { reply_to_message_id: msg.message_id };
+        
+        // 5. Hapus pesan asli di topik General agar tidak duplikat (Fitur Auto-Move)
+        await ctx.telegram.deleteMessage(CHAT_ID, msg.message_id);
+        console.log(`[HAPUS] Pesan asli di Topik General telah dihapus.`);
+        
+        // Memberi konfirmasi di topik General (tanpa reply karena pesan aslinya sudah dihapus)
+        const replyOptions = {};
         if (threadId) {
-          replyOptions.message_thread_id = threadId; // Gunakan threadId asli dari pesan masuk, bukan TOPIC_GENERAL yang diketik manual
+          replyOptions.message_thread_id = threadId;
         }
-        await ctx.telegram.sendMessage(CHAT_ID, `✅ Tersimpan di STB & Disortir.`, replyOptions);
+        await ctx.telegram.sendMessage(CHAT_ID, `✅ File otomatis dipindahkan ke topik sortir & disimpan di STB.`, replyOptions);
+        
       } catch (err) {
-        console.error(`[ERROR REPLY] Gagal membalas pesan: ${err.message}`);
+        console.error(`[ERROR SORTIR/HAPUS] Gagal memproses: ${err.message}`);
       }
 
     } else {
