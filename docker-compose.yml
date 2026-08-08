@@ -7,4 +7,4 @@ services:
     env_file:
       - .env
     volumes:
-      - /mnt/hdd/telegram-uploads/:/watch_dir
+      - /mnt/hdd/telegram-uploads:/mnt/hdd/telegram-uploads
