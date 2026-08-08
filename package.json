@@ -1,0 +1,14 @@
+{
+  "name": "stb-telegram-uploader",
+  "version": "1.0.0",
+  "description": "Auto upload file dari STB ke Telegram Group",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "chokidar": "^3.5.3",
+    "dotenv": "^16.3.1",
+    "telegraf": "^4.15.0"
+  }
+}
