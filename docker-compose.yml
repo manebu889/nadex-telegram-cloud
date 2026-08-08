@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  bot-uploader:
+    build: .
+    container_name: telegram-uploader-bot 
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - /mnt/hdd/telegram-uploads:/mnt/hdd/telegram-uploads

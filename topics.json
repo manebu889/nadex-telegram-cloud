@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Pictures",
+    "id": "4",
+    "extensions": [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg"]
+  },
+  {
+    "name": "Project",
+    "id": "7",
+    "extensions": [".zip", ".rar", ".tar", ".gz", ".7z", ".cdr", ".psd"]
+  },
+  {
+    "name": "Document",
+    "id": "3",
+    "extensions": [".pdf", ".docx", ".ppt"]
+  }
+]
