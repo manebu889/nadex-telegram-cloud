@@ -57,14 +57,28 @@ async function downloadFile(url, dest) {
   });
 }
 
-bot.on(['document', 'photo', 'video'], async (ctx) => {
+// Dengarkan SEMUA pesan yang masuk (lebih stabil dan tidak akan terlewat)
+bot.on('message', async (ctx) => {
   try {
     const msg = ctx.message;
+    
+    // Abaikan pesan teks biasa atau pesan sistem (hanya proses yang punya dokumen, foto, atau video)
+    if (!msg.document && !msg.photo && !msg.video) {
+      return;
+    }
+
     const chatId = msg.chat.id;
     const threadId = msg.message_thread_id || undefined;
 
+    console.log(`[DEBUG] Ada file/gambar masuk! Chat ID: ${chatId} | Topik ID: ${threadId}`);
+    
+    // Jika pesan dikirim ke topik "General" bawaan Telegram, kadang threadId tidak ada (undefined).
+    // Kita anggap undefined sama dengan TOPIC_GENERAL jika TOPIC_GENERAL diset ke 1 atau dikosongkan.
+    const isGeneralTopic = (threadId === TOPIC_GENERAL) || (!threadId && TOPIC_GENERAL === 1);
+
     // Pastikan pesan berasal dari Grup dan Topik General yang benar
-    if (chatId !== CHAT_ID || threadId !== TOPIC_GENERAL) {
+    if (chatId !== CHAT_ID || !isGeneralTopic) {
+      console.log(`[SKIP] File diabaikan. Bot disetting untuk Chat ID: ${CHAT_ID} dan Topik ID: ${TOPIC_GENERAL}`);
       return; 
     }
 
@@ -99,28 +113,46 @@ bot.on(['document', 'photo', 'video'], async (ctx) => {
     await downloadFile(fileLink.href, destPath);
     console.log(`[SIMPAN] Berhasil disimpan di HDD: ${destPath}`);
 
+    // 3. Tentukan Topik Tujuan untuk Penyortiran
     const targetTopicId = getTopicIdByExtension(fileName);
 
     if (targetTopicId) {
-      await ctx.telegram.copyMessage(CHAT_ID, CHAT_ID, msg.message_id, {
-        message_thread_id: targetTopicId
-      });
-      console.log(`[SORTIR] Berhasil disalin ke Topik ID: ${targetTopicId}`);
-      await ctx.telegram.sendMessage(CHAT_ID, `✅ Tersimpan di STB & Disortir.`, {
-        reply_to_message_id: msg.message_id,
-        message_thread_id: TOPIC_GENERAL
-      });
+      // 4. Salin pesan ke Topik yang sesuai
+      try {
+        await ctx.telegram.copyMessage(CHAT_ID, CHAT_ID, msg.message_id, {
+          message_thread_id: targetTopicId
+        });
+        console.log(`[SORTIR] Berhasil disalin ke Topik ID: ${targetTopicId}`);
+      } catch (err) {
+        console.error(`[ERROR SORTIR] Gagal menyalin ke Topik ID ${targetTopicId}. Pastikan ID topik tersebut benar di file .env! Pesan asli Telegram: ${err.message}`);
+      }
+      
+      // Memberi reaksi konfirmasi di pesan asli
+      try {
+        const replyOptions = { reply_to_message_id: msg.message_id };
+        if (threadId) {
+          replyOptions.message_thread_id = threadId; // Gunakan threadId asli dari pesan masuk, bukan TOPIC_GENERAL yang diketik manual
+        }
+        await ctx.telegram.sendMessage(CHAT_ID, `✅ Tersimpan di STB & Disortir.`, replyOptions);
+      } catch (err) {
+        console.error(`[ERROR REPLY] Gagal membalas pesan: ${err.message}`);
+      }
 
     } else {
       console.log(`[SKIP] Ekstensi tidak terdaftar, file hanya disimpan di HDD.`);
-      await ctx.telegram.sendMessage(CHAT_ID, `💾 Tersimpan di STB (Tanpa sortir).`, {
-        reply_to_message_id: msg.message_id,
-        message_thread_id: TOPIC_GENERAL
-      });
+      try {
+        const replyOptions = { reply_to_message_id: msg.message_id };
+        if (threadId) {
+          replyOptions.message_thread_id = threadId;
+        }
+        await ctx.telegram.sendMessage(CHAT_ID, `💾 Tersimpan di STB (Tanpa sortir).`, replyOptions);
+      } catch (err) {
+        console.error(`[ERROR REPLY] Gagal membalas pesan: ${err.message}`);
+      }
     }
 
   } catch (error) {
-    console.error(`[ERROR] Terjadi kesalahan:`, error.message);
+    console.error(`[ERROR UMUM] Terjadi kesalahan:`, error.message);
   }
 });
 
