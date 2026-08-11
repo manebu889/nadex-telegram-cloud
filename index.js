@@ -234,8 +234,16 @@ bot.on('message', async (ctx) => {
       if (label) {
         mediaGroupLabels[msg.media_group_id] = label;
         setTimeout(() => { delete mediaGroupLabels[msg.media_group_id]; }, 600000);
-      } else if (mediaGroupLabels[msg.media_group_id]) {
-        label = mediaGroupLabels[msg.media_group_id];
+      } else {
+        // [FIX] Mengatasi Race Condition Telegram
+        // Telegram mengirim file dalam satu album secara bersamaan.
+        // File tanpa caption akan disuruh 'menunggu' maksimal 3 detik sampai file yang memiliki caption menetapkan labelnya.
+        let retries = 0;
+        while (!mediaGroupLabels[msg.media_group_id] && retries < 15) {
+          await new Promise(r => setTimeout(r, 200));
+          retries++;
+        }
+        label = mediaGroupLabels[msg.media_group_id] || '';
       }
     }
     
