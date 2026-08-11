@@ -27,4 +27,16 @@ async function downloadFile(url, dest) {
   });
 }
 
-module.exports = { getTopicIdByExtension, downloadFile };
+function getFileCategory(fileName) {
+  const ext = path.extname(fileName).toLowerCase();
+  const picturesExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
+  const projectExt = ['.zip', '.rar', '.tar', '.gz', '.7z', '.cdr', '.psd'];
+  const documentExt = ['.pdf', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'];
+
+  if (picturesExt.includes(ext)) return 'photo';
+  if (projectExt.includes(ext)) return 'project';
+  if (documentExt.includes(ext)) return 'document';
+  return 'file'; // default fallback
+}
+
+module.exports = { getTopicIdByExtension, downloadFile, getFileCategory };

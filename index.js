@@ -5,7 +5,7 @@ const path = require('path');
 // ================= IMPORT CONFIG & FUNGSI =================
 const config = require('./src/config');
 const { readDB, saveDB, deleteLabel } = require('./src/database');
-const { getTopicIdByExtension, downloadFile } = require('./src/utils');
+const { getTopicIdByExtension, downloadFile, getFileCategory } = require('./src/utils');
 
 const bot = new Telegraf(config.BOT_TOKEN);
 
@@ -38,7 +38,7 @@ async function sendPage(ctx, results, label, page) {
   if (page < totalPages) navButtons.push(Markup.button.callback('Next ➡️', `p_${page + 1}_${shortLabel}`));
   if (navButtons.length > 0) keyboard.push(navButtons);
 
-  const textMsg = `🔍 Ditemukan **${results.length}** file untuk label '*${label}*'\nMenampilkan hal ${page}/${totalPages}.\n\n*Silakan klik file di bawah ini untuk memanggilnya:*`;
+  const textMsg = `🔍 Ditemukan **${results.length}** file untuk pencarian '*${label}*'\nMenampilkan hal ${page}/${totalPages}.\n\n*Silakan klik file di bawah ini untuk memanggilnya:*`;
 
   // Jika callback dari pagination, cukup edit pesan
   if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('p_')) {
@@ -48,38 +48,46 @@ async function sendPage(ctx, results, label, page) {
   }
 }
 
-// Command: /find [label]
+// Command: /find [label/nama_file/extensi]
 bot.command('find', async (ctx) => {
   const args = ctx.message.text.split(' ');
   const replyOpts = { message_thread_id: ctx.message.message_thread_id };
 
   if (args.length < 2) {
-    return ctx.reply("Gunakan format: /find [nama_label]", replyOpts);
+    return ctx.reply("Gunakan format: /find [kata_kunci]", replyOpts);
   }
   
-  const labelToFind = args.slice(1).join(' ').toLowerCase();
+  const keyword = args.slice(1).join(' ').toLowerCase();
   
   const db = await readDB();
-  const results = db.filter(item => item.label && item.label.includes(labelToFind));
+  const results = db.filter(item => {
+    const lbl = item.label ? item.label.toLowerCase() : '';
+    const fn = item.fileName ? item.fileName.toLowerCase() : '';
+    return lbl.includes(keyword) || fn.includes(keyword);
+  });
   
   if (results.length === 0) {
-    return ctx.reply(`❌ Tidak ada file dengan label: ${labelToFind}`, replyOpts);
+    return ctx.reply(`❌ Tidak ditemukan file/label dengan kata kunci: *${keyword}*`, { parse_mode: 'Markdown', ...replyOpts });
   }
   
-  await sendPage(ctx, results, labelToFind, 1);
+  await sendPage(ctx, results, keyword, 1);
 });
 
 // Listener Tombol Paginasi
 bot.action(/^p_(\d+)_(.+)$/, async (ctx) => {
   const page = parseInt(ctx.match[1]);
-  const labelToFind = ctx.match[2];
+  const keyword = ctx.match[2];
   
   const db = await readDB();
-  const results = db.filter(item => item.label && item.label.includes(labelToFind));
+  const results = db.filter(item => {
+    const lbl = item.label ? item.label.toLowerCase() : '';
+    const fn = item.fileName ? item.fileName.toLowerCase() : '';
+    return lbl.includes(keyword) || fn.includes(keyword);
+  });
   
   await ctx.answerCbQuery();
   if (results.length > 0) {
-    await sendPage(ctx, results, labelToFind, page);
+    await sendPage(ctx, results, keyword, page);
   }
 });
 
@@ -119,7 +127,6 @@ bot.command('del', async (ctx) => {
   // Kondisi 1: Hanya /del (menampilkan daftar label)
   const keyboard = [];
   uniqueLabels.forEach(lbl => {
-    // Memotong nama label jika kepanjangan agar tidak error limit callback data (max 64 bytes)
     const shortLbl = lbl.length > 30 ? lbl.substring(0, 30) + '...' : lbl;
     keyboard.push([Markup.button.callback(`🗑️ Hapus: ${shortLbl}`, `del_lbl_${lbl.substring(0, 30)}`)]);
   });
@@ -177,7 +184,7 @@ bot.action(/^dl_(.+)$/, async (ctx) => {
   await ctx.answerCbQuery("Memanggil file... 🚀");
   
   if (!item) {
-    return ctx.reply(`❌ File ${fileName} sudah tidak ada di database.`, { message_thread_id: ctx.callbackQuery.message.message_thread_id });
+    return ctx.reply(`❌ File sudah tidak ada di database.`, { message_thread_id: ctx.callbackQuery.message.message_thread_id });
   }
 
   const sendOptions = { 
@@ -216,35 +223,7 @@ bot.on('message', async (ctx) => {
 
     if (chatId !== config.CHAT_ID || !isGeneralTopic) return; 
 
-    let fileId, fileName = '', fileType = '';
-
-    if (msg.document) {
-      fileId = msg.document.file_id;
-      fileName = msg.document.file_name;
-      fileType = 'document';
-    } else if (msg.photo) {
-      fileId = msg.photo[msg.photo.length - 1].file_id;
-      fileName = `photo_${msg.message_id}.jpg`; 
-      fileType = 'photo';
-    } else if (msg.video) {
-      fileId = msg.video.file_id;
-      fileName = msg.video.file_name || `video_${msg.message_id}.mp4`;
-      fileType = 'video';
-    }
-
-    if (!fileId) return;
-
-    const fileLink = await ctx.telegram.getFileLink(fileId);
-    
-    if (!path.extname(fileName)) {
-      const ext = path.extname(fileLink.pathname);
-      fileName = fileName + ext;
-    }
-
-    const destPath = path.join(config.WATCH_DIR, fileName);
-    
-    await downloadFile(fileLink.href, destPath);
-
+    // Ambil Label dari Caption terlebih dahulu (karena kita butuh label untuk nama file)
     let label = (msg.caption || '').trim().toLowerCase();
     
     if (msg.media_group_id) {
@@ -255,6 +234,38 @@ bot.on('message', async (ctx) => {
         label = mediaGroupLabels[msg.media_group_id];
       }
     }
+    
+    // Membersihkan label dari karakter aneh agar aman dijadikan nama file
+    const safeLabel = label ? label.replace(/[^a-z0-9_-]/gi, '') : 'tanpalabel';
+
+    let fileId, originalFileName = '', fileType = '';
+
+    if (msg.document) {
+      fileId = msg.document.file_id;
+      originalFileName = msg.document.file_name;
+      fileType = 'document';
+    } else if (msg.photo) {
+      fileId = msg.photo[msg.photo.length - 1].file_id;
+      originalFileName = `photo_${msg.message_id}.jpg`; 
+      fileType = 'photo';
+    } else if (msg.video) {
+      fileId = msg.video.file_id;
+      originalFileName = msg.video.file_name || `video_${msg.message_id}.mp4`;
+      fileType = 'video';
+    }
+
+    if (!fileId) return;
+
+    const fileLink = await ctx.telegram.getFileLink(fileId);
+    
+    let ext = path.extname(originalFileName) || path.extname(fileLink.pathname) || '';
+    ext = ext.toLowerCase();
+    const categoryName = getFileCategory(originalFileName || fileLink.pathname);
+    const fileName = `${safeLabel}-${categoryName}_${msg.message_id}${ext}`;
+
+    const destPath = path.join(config.WATCH_DIR, fileName);
+    
+    await downloadFile(fileLink.href, destPath);
 
     const targetTopicId = getTopicIdByExtension(fileName, config.TOPICS);
 
@@ -271,7 +282,7 @@ bot.on('message', async (ctx) => {
         if (!msg.media_group_id || (msg.media_group_id && msg.caption)) {
           const replyOpts = threadId ? { message_thread_id: threadId } : {};
           const lblMsg = label ? ` (Label: ${label})` : ' (Tanpa Label)';
-          await ctx.telegram.sendMessage(config.CHAT_ID, `✅ File dipindahkan ke topik & disimpan di STB.${lblMsg}`, replyOpts);
+          await ctx.telegram.sendMessage(config.CHAT_ID, `✅ File tersimpan dengan label: ${lblMsg}`, replyOpts);
         }
         
       } catch (err) {
@@ -285,7 +296,7 @@ bot.on('message', async (ctx) => {
       if (!msg.media_group_id || (msg.media_group_id && msg.caption)) {
         const replyOpts = { reply_to_message_id: msg.message_id };
         if (threadId) replyOpts.message_thread_id = threadId;
-        await ctx.telegram.sendMessage(config.CHAT_ID, `💾 Tersimpan di STB (Tanpa sortir).`, replyOpts);
+        await ctx.telegram.sendMessage(config.CHAT_ID, `💾 Tersimpan di STB: ${fileName}`, replyOpts);
       }
     }
   } catch (error) {
@@ -294,7 +305,7 @@ bot.on('message', async (ctx) => {
 });
 
 bot.launch().then(() => {
-    console.log("[INFO] Bot Telegram Berjalan (Refactored dengan config.js)!");
+    console.log("[INFO] Bot Telegram Berjalan (Dengan Filter Ekstensi & Auto-Rename)!");
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
