@@ -200,6 +200,10 @@ bot.action(/^dl_(.+)$/, async (ctx) => {
     } else {
       await ctx.telegram.sendDocument(ctx.chat.id, item.fileId, sendOptions);
     }
+    
+    // Menghapus pesan list (inline keyboard) hasil dari perintah /find
+    await ctx.deleteMessage().catch(()=>{});
+    
   } catch (err) {
     console.error(`Gagal mengirim file ${item.fileName}:`, err.message);
   }

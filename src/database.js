@@ -46,6 +46,14 @@ async function readDB() {
     snapshot.forEach(doc => {
       data.push({ id: doc.id, ...doc.data() });
     });
+    
+    // Mengurutkan dari yang paling awal diupload (berdasarkan createdAt atau fallback ke topicMsgId)
+    data.sort((a, b) => {
+      const timeDiff = (a.createdAt || 0) - (b.createdAt || 0);
+      if (timeDiff !== 0) return timeDiff;
+      return (a.topicMsgId || 0) - (b.topicMsgId || 0);
+    });
+    
     return data;
   } catch (e) {
     console.error("Gagal membaca database dari Firestore:", e);
@@ -59,6 +67,8 @@ async function saveDB(newData) {
     return;
   }
   try {
+    // Tambahkan timestamp saat ini untuk keperluan sorting
+    newData.createdAt = Date.now();
     await dbFirestore.collection('files').add(newData);
   } catch (e) {
     console.error("Gagal menyimpan data ke Firestore:", e);
