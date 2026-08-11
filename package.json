@@ -9,6 +9,7 @@
   "dependencies": {
     "chokidar": "^3.5.3",
     "dotenv": "^16.3.1",
+    "firebase-admin": "^14.2.0",
     "telegraf": "^4.15.0"
   }
 }

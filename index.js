@@ -1,164 +1,388 @@
-require('dotenv').config();
-const { Telegraf } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const CHAT_ID = parseInt(process.env.CHAT_ID); 
-const WATCH_DIR = process.env.WATCH_DIR;
-const TOPIC_GENERAL = parseInt(process.env.TOPIC_GENERAL);
-const TOPIC_PICTURES = parseInt(process.env.TOPIC_PICTURES);
-const TOPIC_PROJECT = parseInt(process.env.TOPIC_PROJECT);
-const TOPIC_DOCUMENT = parseInt(process.env.TOPIC_DOCUMENT);
+// ================= IMPORT CONFIG & FUNGSI =================
+const config = require('./src/config');
+const { readDB, saveDB, deleteLabel } = require('./src/database');
+const { getTopicIdByExtension, downloadFile, getFileCategory } = require('./src/utils');
 
-if (!BOT_TOKEN || !CHAT_ID || !TOPIC_GENERAL) {
-  console.error('[ERROR] BOT_TOKEN, CHAT_ID, atau TOPIC_GENERAL belum diisi di .env!');
-  process.exit(1);
+const bot = new Telegraf(config.BOT_TOKEN);
+
+if (!fs.existsSync(config.WATCH_DIR)) {
+  fs.mkdirSync(config.WATCH_DIR, { recursive: true });
 }
 
-const bot = new Telegraf(BOT_TOKEN);
+// ================= FITUR FIND (List & Paginasi) =================
+async function sendPage(ctx, results, label, page) {
+  const ITEMS_PER_PAGE = 5;
+  const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE) || 1;
+  const startIndex = (page - 1) * ITEMS_PER_PAGE;
+  const paginated = results.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  
+  const replyOpts = {
+    message_thread_id: ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id
+  };
 
-if (!fs.existsSync(WATCH_DIR)) {
-  fs.mkdirSync(WATCH_DIR, { recursive: true });
-  console.log(`[INFO] Folder ${WATCH_DIR} dibuat untuk menyimpan unduhan di STB.`);
+  const keyboard = [];
+  
+  // Buat tombol untuk setiap file
+  for (const item of paginated) {
+     keyboard.push([Markup.button.callback(`📥 Unduh: ${item.fileName}`, `dl_${item.id}`)]);
+  }
+  
+  // Buat tombol navigasi Prev/Next
+  const navButtons = [];
+  const shortLabel = label.substring(0, 20); 
+  if (page > 1) navButtons.push(Markup.button.callback('⬅️ Prev', `p_${page - 1}_${shortLabel}`));
+  if (page < totalPages) navButtons.push(Markup.button.callback('Next ➡️', `p_${page + 1}_${shortLabel}`));
+  if (navButtons.length > 0) keyboard.push(navButtons);
+
+  const textMsg = `🔍 Ditemukan **${results.length}** file untuk pencarian '*${label}*'\nMenampilkan hal ${page}/${totalPages}.\n\n*Silakan klik file di bawah ini untuk memanggilnya:*`;
+
+  // Jika callback dari pagination, cukup edit pesan
+  if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('p_')) {
+    await ctx.editMessageText(textMsg, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) }).catch(()=>{});
+  } else {
+    await ctx.telegram.sendMessage(ctx.chat.id, textMsg, { parse_mode: 'Markdown', ...replyOpts, ...Markup.inlineKeyboard(keyboard) });
+  }
 }
 
-console.log(`[INFO] Bot siap! Menunggu file masuk di Grup: ${CHAT_ID}, Topik General: ${TOPIC_GENERAL}`);
+// Command: /find [label/nama_file/extensi]
+bot.command('find', async (ctx) => {
+  const args = ctx.message.text.split(' ');
+  const replyOpts = { message_thread_id: ctx.message.message_thread_id };
 
-function getTopicIdByExtension(fileName) {
-  const ext = path.extname(fileName).toLowerCase();
+  if (args.length < 2) {
+    return ctx.reply("Gunakan format: /find [kata_kunci]", replyOpts);
+  }
   
-  const picturesExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
-  const projectExt = ['.zip', '.rar', '.tar', '.gz', '.7z', '.cdr', '.psd'];
-  const documentExt = ['.pdf', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'];
+  const keyword = args.slice(1).join(' ').toLowerCase();
   
-  if (picturesExt.includes(ext) && TOPIC_PICTURES) return TOPIC_PICTURES;
-  if (projectExt.includes(ext) && TOPIC_PROJECT) return TOPIC_PROJECT;
-  if (documentExt.includes(ext) && TOPIC_DOCUMENT) return TOPIC_DOCUMENT;
-  
-  return undefined; 
-}
-
-// Fungsi helper untuk mendownload file
-async function downloadFile(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    https.get(url, (response) => {
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close();
-        resolve();
-      });
-    }).on('error', (err) => {
-      fs.unlink(dest, () => {});
-      reject(err);
-    });
+  const db = await readDB();
+  const results = db.filter(item => {
+    const lbl = item.label ? item.label.toLowerCase() : '';
+    const fn = item.fileName ? item.fileName.toLowerCase() : '';
+    return lbl.includes(keyword) || fn.includes(keyword);
   });
+  
+  if (results.length === 0) {
+    return ctx.reply(`❌ Tidak ditemukan file/label dengan kata kunci: *${keyword}*`, { parse_mode: 'Markdown', ...replyOpts });
+  }
+  
+  await sendPage(ctx, results, keyword, 1);
+});
+
+// Listener Tombol Paginasi
+bot.action(/^p_(\d+)_(.+)$/, async (ctx) => {
+  const page = parseInt(ctx.match[1]);
+  const keyword = ctx.match[2];
+  
+  const db = await readDB();
+  const results = db.filter(item => {
+    const lbl = item.label ? item.label.toLowerCase() : '';
+    const fn = item.fileName ? item.fileName.toLowerCase() : '';
+    return lbl.includes(keyword) || fn.includes(keyword);
+  });
+  
+  await ctx.answerCbQuery();
+  if (results.length > 0) {
+    await sendPage(ctx, results, keyword, page);
+  }
+});
+
+// ================= FITUR HISTORY (List & Paginasi) =================
+async function sendHistoryPage(ctx, results, page) {
+  const ITEMS_PER_PAGE = 5;
+  const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE) || 1;
+  const startIndex = (page - 1) * ITEMS_PER_PAGE;
+  const paginated = results.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  
+  const replyOpts = {
+    message_thread_id: ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id
+  };
+
+  const keyboard = [];
+  
+  for (const item of paginated) {
+     keyboard.push([Markup.button.callback(`📥 Unduh: ${item.fileName}`, `dl_${item.id}`)]);
+  }
+  
+  const navButtons = [];
+  if (page > 1) navButtons.push(Markup.button.callback('⬅️ Prev', `h_${page - 1}`));
+  if (page < totalPages) navButtons.push(Markup.button.callback('Next ➡️', `h_${page + 1}`));
+  if (navButtons.length > 0) keyboard.push(navButtons);
+
+  const textMsg = `🕒 **Riwayat File Terupload** (Terbaru - Terlama)\nTotal: **${results.length}** file\nMenampilkan hal ${page}/${totalPages}.\n\n*Silakan klik file di bawah ini untuk memanggilnya:*`;
+
+  if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('h_')) {
+    await ctx.editMessageText(textMsg, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) }).catch(()=>{});
+  } else {
+    await ctx.telegram.sendMessage(ctx.chat.id, textMsg, { parse_mode: 'Markdown', ...replyOpts, ...Markup.inlineKeyboard(keyboard) });
+  }
 }
 
-// Dengarkan SEMUA pesan yang masuk (lebih stabil dan tidak akan terlewat)
+// Command: /history
+bot.command('history', async (ctx) => {
+  const db = await readDB();
+  if (db.length === 0) {
+    return ctx.reply("❌ Belum ada file yang terupload di database.", { message_thread_id: ctx.message.message_thread_id });
+  }
+  
+  // Balikkan urutan agar dari yang terbaru ke terlama
+  const results = db.reverse();
+  await sendHistoryPage(ctx, results, 1);
+});
+
+// Listener Tombol Paginasi History
+bot.action(/^h_(\d+)$/, async (ctx) => {
+  const page = parseInt(ctx.match[1]);
+  
+  const db = await readDB();
+  const results = db.reverse();
+  
+  await ctx.answerCbQuery();
+  if (results.length > 0) {
+    await sendHistoryPage(ctx, results, page);
+  }
+});
+
+// Command: /del [label]
+bot.command('del', async (ctx) => {
+  const args = ctx.message.text.split(' ');
+  const replyOpts = { message_thread_id: ctx.message.message_thread_id };
+
+  const db = await readDB();
+  const uniqueLabels = [...new Set(db.filter(x => x.label).map(x => x.label))];
+
+  if (uniqueLabels.length === 0) {
+    return ctx.reply("❌ Tidak ada label yang tersimpan di database.", replyOpts);
+  }
+
+  // Kondisi 2: /del <nama_label>
+  if (args.length > 1) {
+    const labelToDelete = args.slice(1).join(' ').toLowerCase();
+    
+    if (!uniqueLabels.includes(labelToDelete)) {
+      return ctx.reply(`❌ Label *${labelToDelete}* tidak ditemukan!`, { parse_mode: 'Markdown', ...replyOpts });
+    }
+
+    const deletedItems = await deleteLabel(labelToDelete);
+    const deletedCount = deletedItems.length;
+    
+    // Hapus fisik dan pesan Telegram
+    for (const item of deletedItems) {
+      const filePath = path.join(config.WATCH_DIR, item.fileName);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      if (item.topicMsgId) await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId).catch(()=>{});
+    }
+
+    return ctx.reply(`🗑️ Berhasil menghapus label *${labelToDelete}* secara menyeluruh (${deletedCount} file dihapus dari DB, STB, dan Topik).`, { parse_mode: 'Markdown', ...replyOpts });
+  }
+
+  // Kondisi 1: Hanya /del (menampilkan daftar label)
+  const keyboard = [];
+  uniqueLabels.forEach(lbl => {
+    const shortLbl = lbl.length > 30 ? lbl.substring(0, 30) + '...' : lbl;
+    keyboard.push([Markup.button.callback(`🗑️ Hapus: ${shortLbl}`, `del_lbl_${lbl.substring(0, 30)}`)]);
+  });
+  
+  keyboard.push([Markup.button.callback('❌ Batal', 'cancel_delete')]);
+
+  await ctx.reply("Pilih label yang ingin dihapus:", {
+    reply_to_message_id: ctx.message.message_thread_id ? undefined : ctx.message.message_id,
+    ...replyOpts,
+    ...Markup.inlineKeyboard(keyboard)
+  });
+});
+
+// Listener Tombol Hapus Label
+bot.action(/^del_lbl_(.+)$/, async (ctx) => {
+  const labelSubstring = ctx.match[1];
+  
+  const db = await readDB();
+  const matchedLabel = db.map(x => x.label).find(l => l && l.substring(0, 30) === labelSubstring);
+  
+  if (!matchedLabel) {
+    return ctx.editMessageText(`❌ Label tidak ditemukan atau sudah terhapus.`, { parse_mode: 'Markdown' }).catch(()=>{});
+  }
+
+  const deletedItems = await deleteLabel(matchedLabel);
+  const deletedCount = deletedItems.length;
+  
+  if (deletedCount > 0) {
+    // Hapus fisik dan pesan Telegram
+    for (const item of deletedItems) {
+      const filePath = path.join(config.WATCH_DIR, item.fileName);
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      if (item.topicMsgId) await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId).catch(()=>{});
+    }
+    
+    await ctx.editMessageText(`🗑️ Berhasil menghapus label *${matchedLabel}* secara menyeluruh (${deletedCount} file dihapus dari DB, STB, dan Topik).`, { parse_mode: 'Markdown' }).catch(()=>{});
+  } else {
+    await ctx.editMessageText(`❌ Gagal atau label *${matchedLabel}* sudah tidak ada.`, { parse_mode: 'Markdown' }).catch(()=>{});
+  }
+});
+
+// Listener Tombol Batal Hapus
+bot.action('cancel_delete', async (ctx) => {
+  await ctx.deleteMessage().catch(()=>{});
+  await ctx.answerCbQuery("Proses hapus dibatalkan.");
+});
+
+// Listener Tombol Unduh File
+bot.action(/^dl_(.+)$/, async (ctx) => {
+  const docId = ctx.match[1];
+  
+  const db = await readDB();
+  const item = db.find(x => x.id === docId);
+  
+  await ctx.answerCbQuery("Memanggil file... 🚀");
+  
+  if (!item) {
+    return ctx.reply(`❌ File sudah tidak ada di database.`, { message_thread_id: ctx.callbackQuery.message.message_thread_id });
+  }
+
+  const sendOptions = { 
+    caption: `📁 ${item.fileName}\n🏷 Label: ${item.label}`,
+    message_thread_id: ctx.callbackQuery.message.message_thread_id
+  };
+  
+  try {
+    if (item.type === 'photo') {
+      await ctx.telegram.sendPhoto(ctx.chat.id, item.fileId, sendOptions);
+    } else if (item.type === 'video') {
+      await ctx.telegram.sendVideo(ctx.chat.id, item.fileId, sendOptions);
+    } else {
+      await ctx.telegram.sendDocument(ctx.chat.id, item.fileId, sendOptions);
+    }
+    
+    // Menghapus pesan list (inline keyboard) hasil dari perintah /find
+    await ctx.deleteMessage().catch(()=>{});
+    
+  } catch (err) {
+    console.error(`Gagal mengirim file ${item.fileName}:`, err.message);
+  }
+});
+
+
+// ================= CORE UPLOAD & SORTER =================
+const mediaGroupLabels = {};
+
 bot.on('message', async (ctx) => {
   try {
     const msg = ctx.message;
     
-    // Abaikan pesan teks biasa atau pesan sistem (hanya proses yang punya dokumen, foto, atau video)
-    if (!msg.document && !msg.photo && !msg.video) {
-      return;
-    }
+    // Jangan proses command text
+    if (msg.text && msg.text.startsWith('/')) return;
+    if (!msg.document && !msg.photo && !msg.video) return;
 
     const chatId = msg.chat.id;
     const threadId = msg.message_thread_id || undefined;
+    const isGeneralTopic = (threadId === config.TOPICS.TOPIC_GENERAL) || (!threadId && config.TOPICS.TOPIC_GENERAL === 1);
 
-    console.log(`[DEBUG] Ada file/gambar masuk! Chat ID: ${chatId} | Topik ID: ${threadId}`);
+    if (chatId !== config.CHAT_ID || !isGeneralTopic) return; 
+
+    // Ambil Label dari Caption terlebih dahulu (karena kita butuh label untuk nama file)
+    let label = (msg.caption || '').trim().toLowerCase();
     
-    // Jika pesan dikirim ke topik "General" bawaan Telegram, kadang threadId tidak ada (undefined).
-    // Kita anggap undefined sama dengan TOPIC_GENERAL jika TOPIC_GENERAL diset ke 1 atau dikosongkan.
-    const isGeneralTopic = (threadId === TOPIC_GENERAL) || (!threadId && TOPIC_GENERAL === 1);
-
-    // Pastikan pesan berasal dari Grup dan Topik General yang benar
-    if (chatId !== CHAT_ID || !isGeneralTopic) {
-      console.log(`[SKIP] File diabaikan. Bot disetting untuk Chat ID: ${CHAT_ID} dan Topik ID: ${TOPIC_GENERAL}`);
-      return; 
+    if (msg.media_group_id) {
+      if (label) {
+        mediaGroupLabels[msg.media_group_id] = label;
+        setTimeout(() => { delete mediaGroupLabels[msg.media_group_id]; }, 600000);
+      } else {
+        // [FIX] Mengatasi Race Condition Telegram
+        // Telegram mengirim file dalam satu album secara bersamaan.
+        // File tanpa caption akan disuruh 'menunggu' maksimal 3 detik sampai file yang memiliki caption menetapkan labelnya.
+        let retries = 0;
+        while (!mediaGroupLabels[msg.media_group_id] && retries < 15) {
+          await new Promise(r => setTimeout(r, 200));
+          retries++;
+        }
+        label = mediaGroupLabels[msg.media_group_id] || '';
+      }
     }
+    
+    // Membersihkan label dari karakter aneh agar aman dijadikan nama file
+    const safeLabel = label ? label.replace(/[^a-z0-9_-]/gi, '') : 'tanpalabel';
 
-    let fileId;
-    let fileName = '';
+    let fileId, originalFileName = '', fileType = '';
 
     if (msg.document) {
       fileId = msg.document.file_id;
-      fileName = msg.document.file_name;
+      originalFileName = msg.document.file_name;
+      fileType = 'document';
     } else if (msg.photo) {
       fileId = msg.photo[msg.photo.length - 1].file_id;
-      fileName = `photo_${Date.now()}.jpg`; // Default nama untuk foto
+      originalFileName = `photo_${msg.message_id}.jpg`; 
+      fileType = 'photo';
     } else if (msg.video) {
       fileId = msg.video.file_id;
-      fileName = msg.video.file_name || `video_${Date.now()}.mp4`;
+      originalFileName = msg.video.file_name || `video_${msg.message_id}.mp4`;
+      fileType = 'video';
     }
 
     if (!fileId) return;
 
-    console.log(`\n[TERIMA] Terdeteksi file baru di Topik General. Memproses...`);
-
     const fileLink = await ctx.telegram.getFileLink(fileId);
     
-    if (!path.extname(fileName)) {
-      const ext = path.extname(fileLink.pathname);
-      fileName = fileName + ext;
+    let ext = path.extname(originalFileName) || path.extname(fileLink.pathname) || '';
+    ext = ext.toLowerCase();
+    // Tentukan kategori dari file yang diupload (document, photo, project)
+    const categoryName = getFileCategory(originalFileName || fileLink.pathname);
+
+    let fileName = '';
+    if (categoryName === 'document' || categoryName === 'project') {
+      // Khusus Document & Project: [label]-[nama_file_asli]
+      fileName = `${safeLabel}-${originalFileName}`;
+    } else {
+      // Khusus Photo & Video: [label]-[kategori]_[id].[ext]
+      fileName = `${safeLabel}-${categoryName}_${msg.message_id}${ext}`;
     }
 
-    const destPath = path.join(WATCH_DIR, fileName);
-
-    console.log(`[UNDUH] Sedang mengunduh file ${fileName} ke STB...`);
+    const destPath = path.join(config.WATCH_DIR, fileName);
+    
     await downloadFile(fileLink.href, destPath);
-    console.log(`[SIMPAN] Berhasil disimpan di HDD: ${destPath}`);
 
-    // 3. Tentukan Topik Tujuan untuk Penyortiran
-    const targetTopicId = getTopicIdByExtension(fileName);
+    const targetTopicId = getTopicIdByExtension(fileName, config.TOPICS);
 
     if (targetTopicId) {
-      // 4. Salin pesan ke Topik yang sesuai
       try {
-        await ctx.telegram.copyMessage(CHAT_ID, CHAT_ID, msg.message_id, {
+        const copiedMsg = await ctx.telegram.copyMessage(config.CHAT_ID, config.CHAT_ID, msg.message_id, {
           message_thread_id: targetTopicId
         });
-        console.log(`[SORTIR] Berhasil disalin ke Topik ID: ${targetTopicId}`);
         
-        // 5. Hapus pesan asli di topik General agar tidak duplikat (Fitur Auto-Move)
-        await ctx.telegram.deleteMessage(CHAT_ID, msg.message_id);
-        console.log(`[HAPUS] Pesan asli di Topik General telah dihapus.`);
-        
-        // Memberi konfirmasi di topik General (tanpa reply karena pesan aslinya sudah dihapus)
-        const replyOptions = {};
-        if (threadId) {
-          replyOptions.message_thread_id = threadId;
-        }
-        await ctx.telegram.sendMessage(CHAT_ID, `✅ File otomatis dipindahkan ke topik sortir & disimpan di STB.`, replyOptions);
-        
-      } catch (err) {
-        console.error(`[ERROR SORTIR/HAPUS] Gagal memproses: ${err.message}`);
-      }
+        await saveDB({ fileId, fileName, type: fileType, label, topicId: targetTopicId, topicMsgId: copiedMsg.message_id });
 
-    } else {
-      console.log(`[SKIP] Ekstensi tidak terdaftar, file hanya disimpan di HDD.`);
-      try {
-        const replyOptions = { reply_to_message_id: msg.message_id };
-        if (threadId) {
-          replyOptions.message_thread_id = threadId;
+        await ctx.telegram.deleteMessage(config.CHAT_ID, msg.message_id).catch(()=>{});
+        
+        if (!msg.media_group_id || (msg.media_group_id && msg.caption)) {
+          const replyOpts = threadId ? { message_thread_id: threadId } : {};
+          const lblMsg = label ? ` (Label: ${label})` : ' (Tanpa Label)';
+          await ctx.telegram.sendMessage(config.CHAT_ID, `✅ File tersimpan dengan label: ${lblMsg}`, replyOpts);
         }
-        await ctx.telegram.sendMessage(CHAT_ID, `💾 Tersimpan di STB (Tanpa sortir).`, replyOptions);
+        
       } catch (err) {
-        console.error(`[ERROR REPLY] Gagal membalas pesan: ${err.message}`);
+        if (!err.message.includes('MESSAGE_ID_INVALID') && !err.message.includes('message to copy not found')) {
+          console.error(`[ERROR] Gagal memproses: ${err.message}`);
+        }
+      }
+    } else {
+      await saveDB({ fileId, fileName, type: fileType, label, topicId: threadId, topicMsgId: msg.message_id });
+
+      if (!msg.media_group_id || (msg.media_group_id && msg.caption)) {
+        const replyOpts = { reply_to_message_id: msg.message_id };
+        if (threadId) replyOpts.message_thread_id = threadId;
+        await ctx.telegram.sendMessage(config.CHAT_ID, `💾 Tersimpan di STB: ${fileName}`, replyOpts);
       }
     }
-
   } catch (error) {
     console.error(`[ERROR UMUM] Terjadi kesalahan:`, error.message);
   }
 });
 
 bot.launch().then(() => {
-    console.log("[INFO] Bot Telegram Auto-Downloader & Sorter Berjalan!");
+    console.log("[INFO] Bot Telegram Berjalan (Dengan Filter Ekstensi & Auto-Rename)!");
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
