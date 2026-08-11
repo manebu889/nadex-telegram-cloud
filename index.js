@@ -91,6 +91,62 @@ bot.action(/^p_(\d+)_(.+)$/, async (ctx) => {
   }
 });
 
+// ================= FITUR HISTORY (List & Paginasi) =================
+async function sendHistoryPage(ctx, results, page) {
+  const ITEMS_PER_PAGE = 5;
+  const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE) || 1;
+  const startIndex = (page - 1) * ITEMS_PER_PAGE;
+  const paginated = results.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  
+  const replyOpts = {
+    message_thread_id: ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id
+  };
+
+  const keyboard = [];
+  
+  for (const item of paginated) {
+     keyboard.push([Markup.button.callback(`📥 Unduh: ${item.fileName}`, `dl_${item.id}`)]);
+  }
+  
+  const navButtons = [];
+  if (page > 1) navButtons.push(Markup.button.callback('⬅️ Prev', `h_${page - 1}`));
+  if (page < totalPages) navButtons.push(Markup.button.callback('Next ➡️', `h_${page + 1}`));
+  if (navButtons.length > 0) keyboard.push(navButtons);
+
+  const textMsg = `🕒 **Riwayat File Terupload** (Terbaru - Terlama)\nTotal: **${results.length}** file\nMenampilkan hal ${page}/${totalPages}.\n\n*Silakan klik file di bawah ini untuk memanggilnya:*`;
+
+  if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('h_')) {
+    await ctx.editMessageText(textMsg, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) }).catch(()=>{});
+  } else {
+    await ctx.telegram.sendMessage(ctx.chat.id, textMsg, { parse_mode: 'Markdown', ...replyOpts, ...Markup.inlineKeyboard(keyboard) });
+  }
+}
+
+// Command: /history
+bot.command('history', async (ctx) => {
+  const db = await readDB();
+  if (db.length === 0) {
+    return ctx.reply("❌ Belum ada file yang terupload di database.", { message_thread_id: ctx.message.message_thread_id });
+  }
+  
+  // Balikkan urutan agar dari yang terbaru ke terlama
+  const results = db.reverse();
+  await sendHistoryPage(ctx, results, 1);
+});
+
+// Listener Tombol Paginasi History
+bot.action(/^h_(\d+)$/, async (ctx) => {
+  const page = parseInt(ctx.match[1]);
+  
+  const db = await readDB();
+  const results = db.reverse();
+  
+  await ctx.answerCbQuery();
+  if (results.length > 0) {
+    await sendHistoryPage(ctx, results, page);
+  }
+});
+
 // Command: /del [label]
 bot.command('del', async (ctx) => {
   const args = ctx.message.text.split(' ');
