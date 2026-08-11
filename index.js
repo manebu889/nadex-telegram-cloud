@@ -2,19 +2,22 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
+
+// ================= IMPORT FUNGSI =================
+const { readDB, saveDB } = require('./src/database');
+const { getTopicIdByExtension, downloadFile } = require('./src/utils');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 const CHAT_ID = parseInt(process.env.CHAT_ID); 
 const WATCH_DIR = process.env.WATCH_DIR;
-const TOPIC_GENERAL = parseInt(process.env.TOPIC_GENERAL);
-const TOPIC_PICTURES = parseInt(process.env.TOPIC_PICTURES);
-const TOPIC_PROJECT = parseInt(process.env.TOPIC_PROJECT);
-const TOPIC_DOCUMENT = parseInt(process.env.TOPIC_DOCUMENT);
+const TOPICS = {
+  TOPIC_GENERAL: parseInt(process.env.TOPIC_GENERAL),
+  TOPIC_PICTURES: parseInt(process.env.TOPIC_PICTURES),
+  TOPIC_PROJECT: parseInt(process.env.TOPIC_PROJECT),
+  TOPIC_DOCUMENT: parseInt(process.env.TOPIC_DOCUMENT),
+};
 
-const DB_FILE = path.join(WATCH_DIR, 'db.json');
-
-if (!BOT_TOKEN || !CHAT_ID || !TOPIC_GENERAL) {
+if (!BOT_TOKEN || !CHAT_ID || !TOPICS.TOPIC_GENERAL) {
   console.error('[ERROR] BOT_TOKEN, CHAT_ID, atau TOPIC_GENERAL belum diisi di .env!');
   process.exit(1);
 }
@@ -25,50 +28,10 @@ if (!fs.existsSync(WATCH_DIR)) {
   fs.mkdirSync(WATCH_DIR, { recursive: true });
 }
 
-// ================= FUNGSI DATABASE =================
-function readDB() {
-  if (!fs.existsSync(DB_FILE)) return [];
-  try {
-    return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
-  } catch (e) {
-    return [];
-  }
-}
-
-function saveDB(data) {
-  fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2));
-}
-
-// ================= HELPER & LOGIC =================
-function getTopicIdByExtension(fileName) {
-  const ext = path.extname(fileName).toLowerCase();
-  const picturesExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
-  const projectExt = ['.zip', '.rar', '.tar', '.gz', '.7z', '.cdr', '.psd'];
-  const documentExt = ['.pdf', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'];
-  
-  if (picturesExt.includes(ext) && TOPIC_PICTURES) return TOPIC_PICTURES;
-  if (projectExt.includes(ext) && TOPIC_PROJECT) return TOPIC_PROJECT;
-  if (documentExt.includes(ext) && TOPIC_DOCUMENT) return TOPIC_DOCUMENT;
-  return undefined; 
-}
-
-async function downloadFile(url, dest) {
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(dest);
-    https.get(url, (response) => {
-      response.pipe(file);
-      file.on('finish', () => { file.close(); resolve(); });
-    }).on('error', (err) => {
-      fs.unlink(dest, () => {});
-      reject(err);
-    });
-  });
-}
-
 // ================= FITUR FIND (List & Paginasi) =================
 async function sendPage(ctx, results, label, page) {
   const ITEMS_PER_PAGE = 5;
-  const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE) || 1;
   const startIndex = (page - 1) * ITEMS_PER_PAGE;
   const paginated = results.slice(startIndex, startIndex + ITEMS_PER_PAGE);
   
@@ -91,8 +54,6 @@ async function sendPage(ctx, results, label, page) {
   if (navButtons.length > 0) keyboard.push(navButtons);
 
   const textMsg = `🔍 Ditemukan **${results.length}** file untuk label '*${label}*'\nMenampilkan hal ${page}/${totalPages}.\n\n*Silakan klik file di bawah ini untuk memanggilnya:*`;
-
-  // Jika ini adalah event dari tombol (callback), cukup ubah teks pesannya agar tidak menuhi chat
   if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('p_')) {
     await ctx.editMessageText(textMsg, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) }).catch(()=>{});
   } else {
@@ -110,7 +71,7 @@ bot.command('find', async (ctx) => {
   }
   
   const labelToFind = args.slice(1).join(' ').toLowerCase();
-  const db = readDB();
+  const db = await readDB();
   const results = db.filter(item => item.label && item.label.includes(labelToFind));
   
   if (results.length === 0) {
@@ -124,7 +85,9 @@ bot.command('find', async (ctx) => {
 bot.action(/^p_(\d+)_(.+)$/, async (ctx) => {
   const page = parseInt(ctx.match[1]);
   const labelToFind = ctx.match[2];
-  const db = readDB();
+  
+  // MENGGUNAKAN FIRESTORE: await readDB()
+  const db = await readDB();
   const results = db.filter(item => item.label && item.label.includes(labelToFind));
   
   await ctx.answerCbQuery();
@@ -136,7 +99,9 @@ bot.action(/^p_(\d+)_(.+)$/, async (ctx) => {
 // Listener Tombol Unduh File
 bot.action(/^dl_(.+)$/, async (ctx) => {
   const fileName = ctx.match[1];
-  const db = readDB();
+  
+  // MENGGUNAKAN FIRESTORE: await readDB()
+  const db = await readDB();
   const item = db.find(x => x.fileName === fileName);
   
   await ctx.answerCbQuery("Memanggil file... 🚀");
@@ -170,14 +135,12 @@ const mediaGroupLabels = {};
 bot.on('message', async (ctx) => {
   try {
     const msg = ctx.message;
-    
-    // Jangan proses command text sebagai file
     if (msg.text && msg.text.startsWith('/')) return;
     if (!msg.document && !msg.photo && !msg.video) return;
 
     const chatId = msg.chat.id;
     const threadId = msg.message_thread_id || undefined;
-    const isGeneralTopic = (threadId === TOPIC_GENERAL) || (!threadId && TOPIC_GENERAL === 1);
+    const isGeneralTopic = (threadId === TOPICS.TOPIC_GENERAL) || (!threadId && TOPICS.TOPIC_GENERAL === 1);
 
     if (chatId !== CHAT_ID || !isGeneralTopic) return; 
 
@@ -208,6 +171,8 @@ bot.on('message', async (ctx) => {
     }
 
     const destPath = path.join(WATCH_DIR, fileName);
+    
+    // MENGGUNAKAN UTILS: downloadFile
     await downloadFile(fileLink.href, destPath);
 
     // Ambil Label dari Caption. Jika file ini bagian dari Album (Media Group):
@@ -222,7 +187,8 @@ bot.on('message', async (ctx) => {
       }
     }
 
-    const targetTopicId = getTopicIdByExtension(fileName);
+    // MENGGUNAKAN UTILS: getTopicIdByExtension
+    const targetTopicId = getTopicIdByExtension(fileName, TOPICS);
 
     if (targetTopicId) {
       try {
@@ -230,10 +196,8 @@ bot.on('message', async (ctx) => {
           message_thread_id: targetTopicId
         });
         
-        // Simpan metadata ke Database
-        const db = readDB();
-        db.push({ fileId, fileName, type: fileType, label, topicId: targetTopicId });
-        saveDB(db);
+        // MENGGUNAKAN FIRESTORE: await saveDB()
+        await saveDB({ fileId, fileName, type: fileType, label, topicId: targetTopicId });
 
         // Hapus pesan asli
         await ctx.telegram.deleteMessage(CHAT_ID, msg.message_id).catch(()=>{});
@@ -245,12 +209,14 @@ bot.on('message', async (ctx) => {
         }
         
       } catch (err) {
-        console.error(`[ERROR] Gagal memproses: ${err.message}`);
+        // Sembunyikan error jika pesan aslinya sudah terhapus di Telegram
+        if (!err.message.includes('MESSAGE_ID_INVALID') && !err.message.includes('message to copy not found')) {
+          console.error(`[ERROR] Gagal memproses: ${err.message}`);
+        }
       }
     } else {
-      const db = readDB();
-      db.push({ fileId, fileName, type: fileType, label, topicId: threadId });
-      saveDB(db);
+      // MENGGUNAKAN FIRESTORE: await saveDB()
+      await saveDB({ fileId, fileName, type: fileType, label, topicId: threadId });
 
       if (!msg.media_group_id || (msg.media_group_id && msg.caption)) {
         const replyOpts = { reply_to_message_id: msg.message_id };
@@ -264,7 +230,7 @@ bot.on('message', async (ctx) => {
 });
 
 bot.launch().then(() => {
-    console.log("[INFO] Bot Telegram Berjalan (Dengan Labeling List & Paginasi)!");
+    console.log("[INFO] Bot Telegram Berjalan (Refactored & Firestore)!");
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
