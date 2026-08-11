@@ -264,8 +264,17 @@ bot.on('message', async (ctx) => {
     
     let ext = path.extname(originalFileName) || path.extname(fileLink.pathname) || '';
     ext = ext.toLowerCase();
+    // Tentukan kategori dari file yang diupload (document, photo, project)
     const categoryName = getFileCategory(originalFileName || fileLink.pathname);
-    const fileName = `${safeLabel}-${categoryName}_${msg.message_id}${ext}`;
+
+    let fileName = '';
+    if (categoryName === 'document' || categoryName === 'project') {
+      // Khusus Document & Project: [label]-[nama_file_asli]
+      fileName = `${safeLabel}-${originalFileName}`;
+    } else {
+      // Khusus Photo & Video: [label]-[kategori]_[id].[ext]
+      fileName = `${safeLabel}-${categoryName}_${msg.message_id}${ext}`;
+    }
 
     const destPath = path.join(config.WATCH_DIR, fileName);
     
