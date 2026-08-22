@@ -88,10 +88,20 @@ function decryptPassword(encryptedText) {
   return decrypted;
 }
 
+function formatDate(timestamp) {
+  if (!timestamp) return '-';
+  const date = new Date(timestamp);
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}-${m}-${y}`;
+}
+
 module.exports = { 
   getTopicIdByExtension, 
   downloadFile, 
   getFileCategory,
   encryptPassword,
-  decryptPassword
+  decryptPassword,
+  formatDate
 };

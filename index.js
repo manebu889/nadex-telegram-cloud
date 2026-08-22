@@ -5,7 +5,7 @@ const path = require('path');
 // ================= IMPORT CONFIG & FUNGSI =================
 const config = require('./src/config');
 const { readDB, saveDB, deleteLabel, saveAccount, getMasterGames, getAccounts, addDocument } = require('./src/database');
-const { getTopicIdByExtension, downloadFile, getFileCategory, encryptPassword, decryptPassword } = require('./src/utils');
+const { getTopicIdByExtension, downloadFile, getFileCategory, encryptPassword, decryptPassword, formatDate } = require('./src/utils');
 
 const bot = new Telegraf(config.BOT_TOKEN);
 bot.use(session());
@@ -279,6 +279,39 @@ bot.command('addgame', async (ctx) => {
   } else {
     ctx.reply(`❌ Gagal: ${res.message}`);
   }
+});
+
+bot.command('listgame', async (ctx) => {
+  const gamesRes = await getMasterGames();
+  const accRes = await getAccounts();
+  
+  if (!gamesRes.success || gamesRes.data.length === 0) {
+    return ctx.reply('❌ Belum ada game terdaftar di Master Data.');
+  }
+
+  const accounts = accRes.success ? accRes.data : [];
+  let messageText = '🎮 **Daftar Master Data Game**\n\n';
+
+  gamesRes.data.forEach((game, index) => {
+    // Filter akun untuk game ini
+    const gameAccounts = accounts.filter(acc => acc.gameId === game.id);
+    const totalAccounts = gameAccounts.length;
+    
+    // Cari waktu penambahan akun terakhir
+    let lastAdded = '-';
+    if (totalAccounts > 0) {
+      const latestAcc = gameAccounts.reduce((prev, current) => 
+        (prev.createdAt > current.createdAt) ? prev : current
+      );
+      lastAdded = formatDate(latestAcc.createdAt);
+    }
+    
+    messageText += `*${index + 1}. ${game.name}*\n`;
+    messageText += ` ├ 👥 Total akun : **${totalAccounts}**\n`;
+    messageText += ` └ 🔄 Diperbarui : ${lastAdded}\n\n`;
+  });
+
+  ctx.reply(messageText, { parse_mode: 'Markdown' });
 });
 
 bot.command('save', async (ctx) => {
