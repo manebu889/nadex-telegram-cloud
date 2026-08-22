@@ -4,7 +4,7 @@ const path = require('path');
 
 // ================= IMPORT CONFIG & FUNGSI =================
 const config = require('./src/config');
-const { readDB, saveDB, deleteLabel, saveAccount, getMasterGames, getAccounts, addDocument } = require('./src/database');
+const { readDB, saveDB, deleteLabel, saveAccount, getMasterGames, getAccounts, addDocument, updateAccount } = require('./src/database');
 const { getTopicIdByExtension, downloadFile, getFileCategory, encryptPassword, decryptPassword, formatDate } = require('./src/utils');
 
 const bot = new Telegraf(config.BOT_TOKEN);
@@ -419,6 +419,69 @@ bot.action(/^CHK_ACC_(.+)$/, async (ctx) => {
 });
 
 
+// ================= FITUR EDIT SPESIFIKASI =================
+bot.command('change', async (ctx) => {
+  const buttons = [[Markup.button.callback('📝 Ubah Spesifikasi', 'CMD_CHANGE_SPEC')]];
+  await ctx.reply('Menu Perubahan Data:', {
+    message_thread_id: ctx.message.message_thread_id,
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action('CMD_CHANGE_SPEC', async (ctx) => {
+  const accRes = await getAccounts();
+  const gamesRes = await getMasterGames();
+  
+  if (!accRes.success || accRes.data.length === 0) {
+    return ctx.answerCbQuery('Belum ada akun di database.', { show_alert: true });
+  }
+
+  const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
+  const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
+
+  const buttons = activeGames.map(game => 
+    [Markup.button.callback(`🎮 ${game.name}`, `CHG_GAME_${game.id}`)]
+  );
+
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('Pilih game untuk mengedit spesifikasi akun:', {
+    ...Markup.inlineKeyboard(buttons)
+  }).catch(()=>{});
+});
+
+bot.action(/^CHG_GAME_(.+)$/, async (ctx) => {
+  const gameId = ctx.match[1];
+  const accRes = await getAccounts();
+  
+  if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
+  
+  const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
+  if (gameAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+  
+  const buttons = gameAccounts.map(acc => {
+    const label = `${acc.username}`;
+    return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHG_ACC_${acc.id}`)];
+  });
+
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('Pilih akun yang spesifikasinya ingin diubah:', {
+    ...Markup.inlineKeyboard(buttons)
+  }).catch(()=>{});
+});
+
+bot.action(/^CHG_ACC_(.+)$/, async (ctx) => {
+  const accId = ctx.match[1];
+  
+  ctx.session ??= {};
+  ctx.session.isEditingSpec = true;
+  ctx.session.editSpecAccountId = accId;
+
+  await ctx.answerCbQuery();
+  await ctx.deleteMessage().catch(()=>{});
+  
+  await ctx.reply("📝 **Mode Edit Spesifikasi**\n\nSilakan masukkan teks spesifikasi baru untuk akun ini:\n_(Kirim teks seperti biasa. Ketik '-' untuk mengosongkan deskripsi)_", { parse_mode: 'Markdown' });
+});
+
 // ================= CORE UPLOAD & SORTER =================
 const mediaGroupLabels = {};
 
@@ -428,6 +491,41 @@ bot.on('message', async (ctx) => {
     
     // Jangan proses command text
     if (msg.text && msg.text.startsWith('/')) return;
+
+    // === INTERSEPTOR: Edit Spesifikasi Akun ===
+    if (ctx.session?.isEditingSpec && msg.text) {
+      let newDesc = msg.text.trim();
+      if (newDesc === '-') newDesc = ''; // Hapus deskripsi jika input '-'
+      
+      const accId = ctx.session.editSpecAccountId;
+      
+      await updateAccount(accId, {
+        description: newDesc
+      });
+      
+      // Mengirimkan Notifikasi Perubahan ke Topik Game Center
+      const targetTopic = config.TOPICS.TOPIC_ACCOUNTS;
+      if (targetTopic) {
+        const accRes = await getAccounts();
+        const acc = accRes.success ? accRes.data.find(a => a.id === accId) : null;
+        if (acc) {
+          const gamesRes = await getMasterGames();
+          const game = gamesRes.success ? gamesRes.data.find(g => g.id === acc.gameId) : null;
+          const gameName = game ? game.name : "Unknown";
+          
+          await ctx.telegram.sendMessage(config.CHAT_ID, `🔄 **Spesifikasi Akun Diperbarui**\n\nGame: ${gameName}\nUser: \`${acc.username}\`\n📝 Spesifikasi Baru: ${newDesc || '-'}`, {
+            parse_mode: 'Markdown',
+            message_thread_id: targetTopic
+          }).catch(err => console.error("Gagal forward update spesifikasi:", err.message));
+        }
+      }
+
+      ctx.session.isEditingSpec = false;
+      ctx.session.editSpecAccountId = null;
+      
+      await ctx.deleteMessage().catch(()=>{});
+      return ctx.reply('✅ Spesifikasi akun berhasil diperbarui!');
+    }
 
     // === INTERSEPTOR: Tambah Akun Game ===
     if (ctx.session?.isAddingAccount && msg.text) {

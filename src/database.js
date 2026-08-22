@@ -170,8 +170,24 @@ async function getAccounts() {
   return await getDocuments('account');
 }
 
+async function updateDocument(collectionName, docId, updatedFields) {
+  if (!dbFirestore) return { success: false, data: null, message: 'Firestore is not connected' };
+  try {
+    const docRef = dbFirestore.collection(collectionName).doc(docId);
+    await docRef.update(updatedFields);
+    return { success: true, data: { id: docId, ...updatedFields }, message: `Document updated` };
+  } catch (error) {
+    return { success: false, data: null, message: error.message };
+  }
+}
+
+async function updateAccount(accId, updatedFields) {
+  return await updateDocument('account', accId, updatedFields);
+}
+
 module.exports = { 
   readDB, saveDB, deleteLabel, 
   addDocument, saveAccount, 
-  getDocuments, getMasterGames, getAccounts 
+  getDocuments, getMasterGames, getAccounts,
+  updateDocument, updateAccount
 };
