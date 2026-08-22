@@ -169,7 +169,10 @@ bot.command('del', async (ctx) => {
     for (const item of deletedItems) {
       const filePath = path.join(config.WATCH_DIR, item.fileName);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      if (item.topicMsgId) await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId).catch(()=>{});
+      if (item.topicMsgId) {
+         await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId)
+            .catch(e => console.error(`[ERROR] Gagal menghapus pesan topik (${item.topicMsgId}):`, e.message));
+      }
     }
 
     return ctx.reply(`🗑️ Berhasil menghapus label *${labelToDelete}* secara menyeluruh (${deletedCount} file).`, { parse_mode: 'Markdown', ...replyOpts });
@@ -303,7 +306,10 @@ bot.action(/^del_lbl_(.+)$/, async (ctx) => {
     for (const item of deletedItems) {
       const filePath = path.join(config.WATCH_DIR, item.fileName);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      if (item.topicMsgId) await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId).catch(()=>{});
+      if (item.topicMsgId) {
+         await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId)
+            .catch((e) => console.error(`[ERROR] Gagal menghapus pesan topik (${item.topicMsgId}):`, e.message));
+      }
     }
     
     await ctx.editMessageText(`🗑️ Berhasil menghapus label *${matchedLabel}* secara menyeluruh (${deletedCount} file dihapus dari DB, STB, dan Topik).`, { parse_mode: 'Markdown' }).catch(()=>{});
@@ -422,6 +428,8 @@ bot.action(/^SEL_GAME_(.+)$/, async (ctx) => {
   
   ctx.session ??= {}; 
   ctx.session.isAddingAccount = true;
+  ctx.session.isEditingSpec = false; // Clear state lain
+  ctx.session.passEditStep = null; // Clear state lain
   ctx.session.saveStep = 'WAITING_DESC'; // Tambahan flow deskripsi
   ctx.session.selectedGame = gameId;
 
@@ -606,6 +614,8 @@ bot.action(/^CHG_ACC_(.+)$/, async (ctx) => {
   
   ctx.session ??= {};
   ctx.session.isEditingSpec = true;
+  ctx.session.passEditStep = null; // Clear state lain
+  ctx.session.isAddingAccount = false; // Clear state lain
   ctx.session.editSpecAccountId = accId;
 
   await ctx.answerCbQuery();
@@ -619,6 +629,8 @@ bot.action(/^CHGPASS_ACC_(.+)$/, async (ctx) => {
   
   ctx.session ??= {};
   ctx.session.passEditStep = 'OLD_PASS';
+  ctx.session.isEditingSpec = false; // Clear state lain
+  ctx.session.isAddingAccount = false; // Clear state lain
   ctx.session.editPassAccountId = accId;
 
   await ctx.answerCbQuery();

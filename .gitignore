@@ -7,4 +7,4 @@ yarn-error.log*
 *.log
 .agents
 agents.md
-.uploads
+uploads
