@@ -381,7 +381,7 @@ bot.action(/^CHK_GAME_(.+)$/, async (ctx) => {
   }
   
   const buttons = gameAccounts.map(acc => {
-    const label = acc.description ? `${acc.description.substring(0, 15)} - ${acc.username}` : acc.username;
+    const label = `${acc.username}`;
     return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHK_ACC_${acc.id}`)];
   });
 
