@@ -12,12 +12,16 @@ const config = {
   // Firebase Config
   FIREBASE_CREDENTIALS: process.env.FIREBASE_CREDENTIALS,
   
+  // Security Config
+  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
+  
   // Topics Mapping
   TOPICS: {
     TOPIC_GENERAL: parseInt(process.env.TOPIC_GENERAL),
     TOPIC_PICTURES: parseInt(process.env.TOPIC_PICTURES),
     TOPIC_PROJECT: parseInt(process.env.TOPIC_PROJECT),
     TOPIC_DOCUMENT: parseInt(process.env.TOPIC_DOCUMENT),
+    TOPIC_ACCOUNTS: parseInt(process.env.TOPIC_ACCOUNTS),
   }
 };
 
