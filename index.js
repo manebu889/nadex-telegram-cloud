@@ -308,7 +308,7 @@ bot.command('listgame', async (ctx) => {
     
     messageText += `*${index + 1}. ${game.name}*\n`;
     messageText += ` ├ 👥 Total akun : **${totalAccounts}**\n`;
-    messageText += ` └ 🔄 Diperbarui : ${lastAdded}\n\n`;
+    messageText += ` └ 🔄 Diperbarui : _${lastAdded}_\n\n`;
   });
 
   ctx.reply(messageText, { parse_mode: 'Markdown' });
@@ -335,10 +335,11 @@ bot.action(/^SEL_GAME_(.+)$/, async (ctx) => {
   
   ctx.session ??= {}; 
   ctx.session.isAddingAccount = true;
+  ctx.session.saveStep = 'WAITING_DESC'; // Tambahan flow deskripsi
   ctx.session.selectedGame = gameId;
 
   await ctx.answerCbQuery();
-  await ctx.reply(`Game telah dipilih.\n\nSilakan masukkan Username/Email dan Password (pisahkan dengan spasi):\nContoh: \`user@email.com pass123\``, { parse_mode: 'Markdown' });
+  await ctx.reply(`Game telah dipilih.\n\nSilakan masukkan Spesifikasi/Deskripsi akun ini:\nContoh: _Akun Smurf Tier Mythic_`, { parse_mode: 'Markdown' });
 });
 
 bot.command('check', async (ctx) => {
@@ -349,18 +350,43 @@ bot.command('check', async (ctx) => {
     return ctx.reply('Belum ada akun yang tersimpan di database.');
   }
 
-  const gamesMap = {};
-  if (gamesRes.success) {
-    gamesRes.data.forEach(g => gamesMap[g.id] = g.name);
+  // Hanya tampilkan master game yang memiliki akun
+  const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
+  const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
+
+  if (activeGames.length === 0) {
+    return ctx.reply('Belum ada akun yang bisa ditampilkan.');
   }
 
-  const buttons = accRes.data.map(acc => {
-    const gName = gamesMap[acc.gameId] || 'Unknown Game';
-    return [Markup.button.callback(`${gName} - ${acc.username}`, `CHK_ACC_${acc.id}`)];
+  const buttons = activeGames.map(game => 
+    [Markup.button.callback(`🎮 ${game.name}`, `CHK_GAME_${game.id}`)]
+  );
+
+  await ctx.reply('Pilih game untuk melihat daftar akunnya:', {
+    message_thread_id: ctx.message.message_thread_id,
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action(/^CHK_GAME_(.+)$/, async (ctx) => {
+  const gameId = ctx.match[1];
+  const accRes = await getAccounts();
+  
+  if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
+  
+  const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
+  
+  if (gameAccounts.length === 0) {
+    return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+  }
+  
+  const buttons = gameAccounts.map(acc => {
+    const label = acc.description ? `${acc.description.substring(0, 15)} - ${acc.username}` : acc.username;
+    return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHK_ACC_${acc.id}`)];
   });
 
-  await ctx.reply('Pilih akun yang ingin Anda lihat passwordnya:', {
-    message_thread_id: ctx.message.message_thread_id,
+  await ctx.answerCbQuery();
+  await ctx.reply('Daftar Akun:\nPilih akun yang ingin Anda lihat detailnya:', {
     ...Markup.inlineKeyboard(buttons)
   });
 });
@@ -375,7 +401,9 @@ bot.action(/^CHK_ACC_(.+)$/, async (ctx) => {
   try {
     const decryptedPass = decryptPassword(acc.password);
     await ctx.answerCbQuery("Mengambil password...");
-    const sentMsg = await ctx.reply(`🔐 Username: \`${acc.username}\`\n🔑 Password: \`${decryptedPass}\`\n\n_(Pesan ini akan otomatis terhapus dalam 25 detik)_`, { parse_mode: 'Markdown' });
+    
+    const descText = acc.description ? `\n📝 Spesifikasi: _${acc.description}_` : '';
+    const sentMsg = await ctx.reply(`🔐 Username: \`${acc.username}\`\n🔑 Password: \`${decryptedPass}\`${descText}\n\n_(Pesan ini akan otomatis terhapus dalam 25 detik)_`, { parse_mode: 'Markdown' });
     
     // Auto-delete pesan berisi password setelah 25 detik (25000 ms)
     setTimeout(() => {
@@ -400,43 +428,59 @@ bot.on('message', async (ctx) => {
 
     // === INTERSEPTOR: Tambah Akun Game ===
     if (ctx.session?.isAddingAccount && msg.text) {
-      const input = msg.text.trim().split(/\s+/);
-      if (input.length < 2) {
-        return ctx.reply("❌ Format salah. Harus ada username dan password dipisah dengan spasi.");
+      if (ctx.session.saveStep === 'WAITING_DESC') {
+        ctx.session.tempDesc = msg.text.trim();
+        ctx.session.saveStep = 'WAITING_CREDS';
+        
+        // Hapus pesan deskripsi agar chat tetap rapi
+        await ctx.deleteMessage().catch(()=>{}); 
+        
+        return ctx.reply("✅ Spesifikasi tersimpan.\n\nSekarang masukkan Username/Email dan Password (pisahkan dengan spasi):\nContoh: `user@email.com pass123`", { parse_mode: 'Markdown' });
       }
-      
-      const user = input[0];
-      const passwordRaw = input.slice(1).join(' ');
-      
-      const encryptedPass = encryptPassword(passwordRaw);
-      await saveAccount({ 
-        gameId: ctx.session.selectedGame, 
-        username: user, 
-        password: encryptedPass 
-      });
-      
-      ctx.session.isAddingAccount = false; // Reset session
-      
-      // Hapus pesan teks user agar password mentah tidak tertinggal di chat
-      await ctx.deleteMessage().catch(err => console.error("Gagal hapus pesan input:", err.message));
-      
-      // Forward ke topic akun jika ada
-      const targetTopic = config.TOPICS.TOPIC_ACCOUNTS;
-      if (targetTopic) {
-        const gamesRes = await getMasterGames();
-        let gameName = "Unknown";
-        if (gamesRes.success) {
-          const matched = gamesRes.data.find(g => g.id === ctx.session.selectedGame);
-          if (matched) gameName = matched.name;
+      else if (ctx.session.saveStep === 'WAITING_CREDS') {
+        const input = msg.text.trim().split(/\s+/);
+        if (input.length < 2) {
+          return ctx.reply("❌ Format salah. Harus ada username dan password dipisah dengan spasi.");
         }
+        
+        const user = input[0];
+        const passwordRaw = input.slice(1).join(' ');
+        
+        const encryptedPass = encryptPassword(passwordRaw);
+        const desc = ctx.session.tempDesc; // Simpan ke variabel lokal dulu
+        
+        await saveAccount({ 
+          gameId: ctx.session.selectedGame,
+          description: desc,
+          username: user, 
+          password: encryptedPass 
+        });
+        
+        ctx.session.isAddingAccount = false; // Reset session
+        ctx.session.saveStep = null;
+        ctx.session.tempDesc = null;
+        
+        // Hapus pesan teks user agar password mentah tidak tertinggal di chat
+        await ctx.deleteMessage().catch(err => console.error("Gagal hapus pesan input:", err.message));
+        
+        // Forward ke topic akun jika ada
+        const targetTopic = config.TOPICS.TOPIC_ACCOUNTS;
+        if (targetTopic) {
+          const gamesRes = await getMasterGames();
+          let gameName = "Unknown";
+          if (gamesRes.success) {
+            const matched = gamesRes.data.find(g => g.id === ctx.session.selectedGame);
+            if (matched) gameName = matched.name;
+          }
 
-        await ctx.telegram.sendMessage(config.CHAT_ID, `🎮 **Akun Game Baru Ditambahkan**\n\nGame: ${gameName}\nUser: \`${user}\`\nStatus: Terenkripsi 🔐`, {
-          parse_mode: 'Markdown',
-          message_thread_id: targetTopic
-        }).catch(err => console.error("Gagal forward info akun:", err.message));
+          await ctx.telegram.sendMessage(config.CHAT_ID, `🎮 **Akun Game Baru Ditambahkan**\n\nGame: ${gameName}\n📝 Spesifikasi: ${desc || '-'}\nUser: \`${user}\`\nStatus: Terenkripsi 🔐`, {
+            parse_mode: 'Markdown',
+            message_thread_id: targetTopic
+          }).catch(err => console.error("Gagal forward info akun:", err.message));
+        }
+        
+        return ctx.reply('✅ Akun beserta spesifikasinya berhasil disimpan ke database!');
       }
-      
-      return ctx.reply('✅ Akun berhasil disimpan ke database!');
     }
     // =====================================
 
