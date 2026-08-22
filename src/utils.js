@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 
 function getTopicIdByExtension(fileName, topicsConfig) {
   const ext = path.extname(fileName).toLowerCase();
@@ -39,4 +40,68 @@ function getFileCategory(fileName) {
   return 'file'; // default fallback
 }
 
-module.exports = { getTopicIdByExtension, downloadFile, getFileCategory };
+const ALGORITHM = 'aes-256-gcm';
+const IV_LENGTH = 12;
+
+function getEncryptionKey() {
+  const secret = process.env.ENCRYPTION_KEY;
+  if (!secret) {
+    throw new Error('ENCRYPTION_KEY belum di-setting di .env');
+  }
+  // Menghasilkan key berukuran 32-byte (256-bit) secara konsisten
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+function encryptPassword(plaintext) {
+  if (!plaintext) return plaintext;
+  const key = getEncryptionKey();
+  const iv = crypto.randomBytes(IV_LENGTH);
+  const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
+  
+  let encrypted = cipher.update(plaintext, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const authTag = cipher.getAuthTag().toString('hex');
+  
+  // Format: iv:authTag:encryptedText
+  return `${iv.toString('hex')}:${authTag}:${encrypted}`;
+}
+
+function decryptPassword(encryptedText) {
+  if (!encryptedText) return encryptedText;
+  
+  const parts = encryptedText.split(':');
+  if (parts.length !== 3) {
+    throw new Error('Format teks terenkripsi tidak valid.');
+  }
+  
+  const iv = Buffer.from(parts[0], 'hex');
+  const authTag = Buffer.from(parts[1], 'hex');
+  const encryptedTextHex = parts[2];
+  const key = getEncryptionKey();
+  
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(authTag);
+  
+  let decrypted = decipher.update(encryptedTextHex, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  
+  return decrypted;
+}
+
+function formatDate(timestamp) {
+  if (!timestamp) return '-';
+  const date = new Date(timestamp);
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}-${m}-${y}`;
+}
+
+module.exports = { 
+  getTopicIdByExtension, 
+  downloadFile, 
+  getFileCategory,
+  encryptPassword,
+  decryptPassword,
+  formatDate
+};

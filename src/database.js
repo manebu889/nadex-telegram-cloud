@@ -97,4 +97,113 @@ async function deleteLabel(labelName) {
   }
 }
 
-module.exports = { readDB, saveDB, deleteLabel };
+/**
+ * Fungsi generik dan reusable untuk menambahkan dokumen ke collection apa pun.
+ * Mengikuti aturan "API Response Format" di AGENTS.md.
+ */
+async function addDocument(collectionName, data) {
+  if (!dbFirestore) {
+    console.error(`[ERROR] Firestore belum terhubung. Gagal menyimpan ke ${collectionName}.`);
+    return { success: false, data: null, message: 'Firestore is not connected' };
+  }
+  
+  try {
+    const dataToSave = { ...data, createdAt: Date.now() };
+    const docRef = await dbFirestore.collection(collectionName).add(dataToSave);
+    
+    return { 
+      success: true, 
+      data: { id: docRef.id, ...dataToSave }, 
+      message: `Data successfully saved to ${collectionName}` 
+    };
+  } catch (error) {
+    console.error(`[ERROR] Gagal menyimpan data ke ${collectionName}:`, error);
+    return { success: false, data: null, message: error.message };
+  }
+}
+
+/**
+ * Fungsi generik dan reusable untuk membaca semua dokumen dari collection apa pun.
+ */
+async function getDocuments(collectionName) {
+  if (!dbFirestore) {
+    console.error(`[ERROR] Firestore belum terhubung. Gagal membaca ${collectionName}.`);
+    return { success: false, data: null, message: 'Firestore is not connected' };
+  }
+  
+  try {
+    const snapshot = await dbFirestore.collection(collectionName).get();
+    const data = [];
+    snapshot.forEach(doc => {
+      data.push({ id: doc.id, ...doc.data() });
+    });
+    
+    return { 
+      success: true, 
+      data: data, 
+      message: `Successfully retrieved ${data.length} documents from ${collectionName}` 
+    };
+  } catch (error) {
+    console.error(`[ERROR] Gagal membaca data dari ${collectionName}:`, error);
+    return { success: false, data: null, message: error.message };
+  }
+}
+
+/**
+ * Fungsi khusus untuk menyimpan akun game
+ */
+async function saveAccount(accountData) {
+  return await addDocument('account', accountData);
+}
+
+/**
+ * Fungsi khusus untuk mengambil semua daftar Master Game
+ */
+async function getMasterGames() {
+  return await getDocuments('master_games');
+}
+
+/**
+ * Fungsi khusus untuk mengambil semua akun yang tersimpan
+ */
+async function getAccounts() {
+  return await getDocuments('account');
+}
+
+async function updateDocument(collectionName, docId, updatedFields) {
+  if (!dbFirestore) return { success: false, data: null, message: 'Firestore is not connected' };
+  try {
+    const docRef = dbFirestore.collection(collectionName).doc(docId);
+    await docRef.update(updatedFields);
+    return { success: true, data: { id: docId, ...updatedFields }, message: `Document updated` };
+  } catch (error) {
+    return { success: false, data: null, message: error.message };
+  }
+}
+
+async function deleteDocument(collectionName, docId) {
+  if (!dbFirestore) return { success: false, data: null, message: 'Firestore is not connected' };
+  try {
+    const docRef = dbFirestore.collection(collectionName).doc(docId);
+    await docRef.delete();
+    return { success: true, data: null, message: `Document deleted` };
+  } catch (error) {
+    return { success: false, data: null, message: error.message };
+  }
+}
+
+async function updateAccount(accId, updatedFields) {
+  return await updateDocument('account', accId, updatedFields);
+}
+
+async function deleteAccount(accId) {
+  return await deleteDocument('account', accId);
+}
+
+module.exports = { 
+  readDB, saveDB, deleteLabel, 
+  addDocument, saveAccount, 
+  getDocuments, getMasterGames, getAccounts,
+  updateDocument, updateAccount,
+  deleteDocument, deleteAccount
+};

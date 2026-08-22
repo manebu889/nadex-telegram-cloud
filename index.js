@@ -1,13 +1,29 @@
-const { Telegraf, Markup } = require('telegraf');
+const { Telegraf, Markup, session } = require('telegraf');
 const fs = require('fs');
 const path = require('path');
 
 // ================= IMPORT CONFIG & FUNGSI =================
 const config = require('./src/config');
-const { readDB, saveDB, deleteLabel } = require('./src/database');
-const { getTopicIdByExtension, downloadFile, getFileCategory } = require('./src/utils');
+const { readDB, saveDB, deleteLabel, saveAccount, getMasterGames, getAccounts, addDocument, updateAccount } = require('./src/database');
+const { getTopicIdByExtension, downloadFile, getFileCategory, encryptPassword, decryptPassword, formatDate } = require('./src/utils');
 
 const bot = new Telegraf(config.BOT_TOKEN);
+bot.use(session());
+
+// ================= MIDDLEWARE: Restriksi Command =================
+bot.use((ctx, next) => {
+  if (ctx.message && ctx.message.text && ctx.message.text.startsWith('/')) {
+    const chatId = ctx.message.chat.id;
+    const threadId = ctx.message.message_thread_id || undefined;
+    const isGeneralTopic = (threadId === config.TOPICS.TOPIC_GENERAL) || (!threadId && config.TOPICS.TOPIC_GENERAL === 1);
+    
+    // Jika bukan di chat utama atau bukan di General Topic, abaikan command tanpa peringatan
+    if (chatId !== config.CHAT_ID || !isGeneralTopic) {
+      return; 
+    }
+  }
+  return next();
+});
 
 if (!fs.existsSync(config.WATCH_DIR)) {
   fs.mkdirSync(config.WATCH_DIR, { recursive: true });
@@ -147,20 +163,15 @@ bot.action(/^h_(\d+)$/, async (ctx) => {
   }
 });
 
-// Command: /del [label]
+// Command: /del
 bot.command('del', async (ctx) => {
   const args = ctx.message.text.split(' ');
   const replyOpts = { message_thread_id: ctx.message.message_thread_id };
 
-  const db = await readDB();
-  const uniqueLabels = [...new Set(db.filter(x => x.label).map(x => x.label))];
-
-  if (uniqueLabels.length === 0) {
-    return ctx.reply("❌ Tidak ada label yang tersimpan di database.", replyOpts);
-  }
-
-  // Kondisi 2: /del <nama_label>
+  // Kondisi 2: /del <nama_label> (Hapus cepat via teks)
   if (args.length > 1) {
+    const db = await readDB();
+    const uniqueLabels = [...new Set(db.filter(x => x.label).map(x => x.label))];
     const labelToDelete = args.slice(1).join(' ').toLowerCase();
     
     if (!uniqueLabels.includes(labelToDelete)) {
@@ -170,17 +181,38 @@ bot.command('del', async (ctx) => {
     const deletedItems = await deleteLabel(labelToDelete);
     const deletedCount = deletedItems.length;
     
-    // Hapus fisik dan pesan Telegram
     for (const item of deletedItems) {
       const filePath = path.join(config.WATCH_DIR, item.fileName);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      if (item.topicMsgId) await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId).catch(()=>{});
+      if (item.topicMsgId) {
+         await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId)
+            .catch(e => console.error(`[ERROR] Gagal menghapus pesan topik (${item.topicMsgId}):`, e.message));
+      }
     }
 
-    return ctx.reply(`🗑️ Berhasil menghapus label *${labelToDelete}* secara menyeluruh (${deletedCount} file dihapus dari DB, STB, dan Topik).`, { parse_mode: 'Markdown', ...replyOpts });
+    return ctx.reply(`🗑️ Berhasil menghapus label *${labelToDelete}* secara menyeluruh (${deletedCount} file).`, { parse_mode: 'Markdown', ...replyOpts });
   }
 
-  // Kondisi 1: Hanya /del (menampilkan daftar label)
+  // Kondisi 1: Hanya /del (menampilkan menu pilihan)
+  const buttons = [
+    [Markup.button.callback('🖼 Hapus Label Foto', 'DEL_MENU_LABEL')],
+    [Markup.button.callback('🎮 Hapus Akun Game', 'DEL_MENU_ACCOUNT')]
+  ];
+
+  await ctx.reply("Menu Penghapusan Data:", {
+    ...replyOpts,
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action('DEL_MENU_LABEL', async (ctx) => {
+  const db = await readDB();
+  const uniqueLabels = [...new Set(db.filter(x => x.label).map(x => x.label))];
+
+  if (uniqueLabels.length === 0) {
+    return ctx.answerCbQuery("❌ Tidak ada label foto di database.", { show_alert: true });
+  }
+
   const keyboard = [];
   uniqueLabels.forEach(lbl => {
     const shortLbl = lbl.length > 30 ? lbl.substring(0, 30) + '...' : lbl;
@@ -189,11 +221,85 @@ bot.command('del', async (ctx) => {
   
   keyboard.push([Markup.button.callback('❌ Batal', 'cancel_delete')]);
 
-  await ctx.reply("Pilih label yang ingin dihapus:", {
-    reply_to_message_id: ctx.message.message_thread_id ? undefined : ctx.message.message_id,
-    ...replyOpts,
+  await ctx.answerCbQuery();
+  await ctx.editMessageText("Pilih label foto yang ingin dihapus:", {
     ...Markup.inlineKeyboard(keyboard)
+  }).catch(()=>{});
+});
+
+bot.action('DEL_MENU_ACCOUNT', async (ctx) => {
+  const accRes = await getAccounts();
+  const gamesRes = await getMasterGames();
+  
+  if (!accRes.success || accRes.data.length === 0) {
+    return ctx.answerCbQuery('Belum ada akun di database.', { show_alert: true });
+  }
+
+  const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
+  const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
+
+  const buttons = activeGames.map(game => 
+    [Markup.button.callback(`🎮 ${game.name}`, `DEL_GAME_${game.id}`)]
+  );
+  buttons.push([Markup.button.callback('❌ Batal', 'cancel_delete')]);
+
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('Pilih game dari akun yang ingin dihapus:', {
+    ...Markup.inlineKeyboard(buttons)
+  }).catch(()=>{});
+});
+
+bot.action(/^DEL_GAME_(.+)$/, async (ctx) => {
+  const gameId = ctx.match[1];
+  const accRes = await getAccounts();
+  
+  if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
+  
+  const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
+  if (gameAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+  
+  const buttons = gameAccounts.map(acc => {
+    const label = `${acc.username}`;
+    return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `DEL_ACC_${acc.id}`)];
   });
+  buttons.push([Markup.button.callback('❌ Batal', 'cancel_delete')]);
+
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('⚠️ Pilih akun yang akan DIHAPUS PERMANEN:', {
+    ...Markup.inlineKeyboard(buttons)
+  }).catch(()=>{});
+});
+
+bot.action(/^DEL_ACC_(.+)$/, async (ctx) => {
+  const accId = ctx.match[1];
+  const { deleteAccount } = require('./src/database');
+  
+  const accRes = await getAccounts();
+  const acc = accRes.success ? accRes.data.find(a => a.id === accId) : null;
+  
+  if (!acc) return ctx.answerCbQuery("Akun tidak ditemukan atau sudah terhapus.", { show_alert: true });
+
+  const delRes = await deleteAccount(accId);
+  await ctx.answerCbQuery();
+  
+  if (delRes.success) {
+    await ctx.editMessageText(`✅ Akun \`${acc.username}\` berhasil dihapus secara permanen.`, { parse_mode: 'Markdown' }).catch(()=>{});
+    
+    // Notif ke topic
+    const targetTopic = config.TOPICS.TOPIC_ACCOUNTS;
+    if (targetTopic) {
+        const gamesRes = await getMasterGames();
+        const game = gamesRes.success ? gamesRes.data.find(g => g.id === acc.gameId) : null;
+        const gameName = game ? game.name : "Unknown";
+        
+        await ctx.telegram.sendMessage(config.CHAT_ID, `🗑 **Akun Dihapus**\n\nGame: ${gameName}\nUser: \`${acc.username}\`\nStatus: Terhapus Permanen 🚫`, {
+          parse_mode: 'Markdown',
+          message_thread_id: targetTopic
+        }).catch(err => console.error("Gagal forward info hapus:", err.message));
+    }
+  } else {
+    await ctx.editMessageText(`❌ Gagal menghapus akun: ${delRes.message}`).catch(()=>{});
+  }
 });
 
 // Listener Tombol Hapus Label
@@ -215,7 +321,10 @@ bot.action(/^del_lbl_(.+)$/, async (ctx) => {
     for (const item of deletedItems) {
       const filePath = path.join(config.WATCH_DIR, item.fileName);
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      if (item.topicMsgId) await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId).catch(()=>{});
+      if (item.topicMsgId) {
+         await ctx.telegram.deleteMessage(config.CHAT_ID, item.topicMsgId)
+            .catch((e) => console.error(`[ERROR] Gagal menghapus pesan topik (${item.topicMsgId}):`, e.message));
+      }
     }
     
     await ctx.editMessageText(`🗑️ Berhasil menghapus label *${matchedLabel}* secara menyeluruh (${deletedCount} file dihapus dari DB, STB, dan Topik).`, { parse_mode: 'Markdown' }).catch(()=>{});
@@ -266,6 +375,285 @@ bot.action(/^dl_(.+)$/, async (ctx) => {
 });
 
 
+// ================= FITUR AKUN GAME =================
+
+bot.command('addgame', async (ctx) => {
+  const args = ctx.message.text.split(' ').slice(1);
+  if (args.length === 0) return ctx.reply("Gunakan format: /addgame [Nama Game]");
+  const gameName = args.join(' ');
+  const res = await addDocument('master_games', { name: gameName });
+  if (res.success) {
+    ctx.reply(`✅ Game '${gameName}' berhasil ditambahkan ke Master Data.`);
+  } else {
+    ctx.reply(`❌ Gagal: ${res.message}`);
+  }
+});
+
+bot.command('listgame', async (ctx) => {
+  const gamesRes = await getMasterGames();
+  const accRes = await getAccounts();
+  
+  if (!gamesRes.success || gamesRes.data.length === 0) {
+    return ctx.reply('❌ Belum ada game terdaftar di Master Data.');
+  }
+
+  const accounts = accRes.success ? accRes.data : [];
+  let messageText = '🎮 **Daftar Master Data Game**\n\n';
+
+  gamesRes.data.forEach((game, index) => {
+    // Filter akun untuk game ini
+    const gameAccounts = accounts.filter(acc => acc.gameId === game.id);
+    const totalAccounts = gameAccounts.length;
+    
+    // Cari waktu penambahan akun terakhir
+    let lastAdded = '-';
+    if (totalAccounts > 0) {
+      const latestAcc = gameAccounts.reduce((prev, current) => 
+        (prev.createdAt > current.createdAt) ? prev : current
+      );
+      lastAdded = formatDate(latestAcc.createdAt);
+    }
+    
+    messageText += `*${index + 1}. ${game.name}*\n`;
+    messageText += ` ├ 👥 Total akun : **${totalAccounts}**\n`;
+    messageText += ` └ 🔄 Diperbarui : _${lastAdded}_\n\n`;
+  });
+
+  ctx.reply(messageText, { parse_mode: 'Markdown' });
+});
+
+bot.command('save', async (ctx) => {
+  const gamesRes = await getMasterGames();
+  if (!gamesRes.success || gamesRes.data.length === 0) {
+    return ctx.reply('Daftar game masih kosong! Tambahkan terlebih dahulu dengan perintah: /addgame Nama Game');
+  }
+
+  const buttons = gamesRes.data.map(game => 
+    [Markup.button.callback(game.name, `SEL_GAME_${game.id}`)]
+  );
+  
+  await ctx.reply('Pilih game yang akan disimpan informasinya:', {
+    message_thread_id: ctx.message.message_thread_id,
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action(/^SEL_GAME_(.+)$/, async (ctx) => {
+  const gameId = ctx.match[1];
+  
+  ctx.session ??= {}; 
+  ctx.session.isAddingAccount = true;
+  ctx.session.isEditingSpec = false; // Clear state lain
+  ctx.session.passEditStep = null; // Clear state lain
+  ctx.session.saveStep = 'WAITING_DESC'; // Tambahan flow deskripsi
+  ctx.session.selectedGame = gameId;
+
+  await ctx.answerCbQuery();
+  await ctx.deleteMessage().catch(()=>{}); // Hapus opsi agar chat rapi
+  await ctx.reply(`Game telah dipilih.\n\nSilakan masukkan Spesifikasi/Deskripsi akun ini:\nContoh: _Akun Smurf Tier Mythic_`, { parse_mode: 'Markdown' });
+});
+
+bot.command('check', async (ctx) => {
+  const accRes = await getAccounts();
+  const gamesRes = await getMasterGames();
+  
+  if (!accRes.success || accRes.data.length === 0) {
+    return ctx.reply('Belum ada akun yang tersimpan di database.');
+  }
+
+  // Hanya tampilkan master game yang memiliki akun
+  const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
+  const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
+
+  if (activeGames.length === 0) {
+    return ctx.reply('Belum ada akun yang bisa ditampilkan.');
+  }
+
+  const buttons = activeGames.map(game => 
+    [Markup.button.callback(`🎮 ${game.name}`, `CHK_GAME_${game.id}`)]
+  );
+
+  await ctx.reply('Pilih game untuk melihat daftar akunnya:', {
+    message_thread_id: ctx.message.message_thread_id,
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action(/^CHK_GAME_(.+)$/, async (ctx) => {
+  const gameId = ctx.match[1];
+  const accRes = await getAccounts();
+  
+  if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
+  
+  const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
+  
+  if (gameAccounts.length === 0) {
+    return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+  }
+  
+  const buttons = gameAccounts.map(acc => {
+    const label = `${acc.username}`;
+    return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHK_ACC_${acc.id}`)];
+  });
+
+  await ctx.answerCbQuery();
+  await ctx.deleteMessage().catch(()=>{}); // Hapus opsi agar chat rapi
+  await ctx.reply('Daftar Akun:\nPilih akun yang ingin Anda lihat detailnya:', {
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action(/^CHK_ACC_(.+)$/, async (ctx) => {
+  const accId = ctx.match[1];
+  const accRes = await getAccounts();
+  const acc = accRes.data.find(a => a.id === accId);
+  
+  if (!acc) return ctx.answerCbQuery("Akun tidak ditemukan atau sudah terhapus.");
+  
+  try {
+    const decryptedPass = decryptPassword(acc.password);
+    await ctx.answerCbQuery("Mengambil password...");
+    await ctx.deleteMessage().catch(()=>{}); // Hapus opsi agar chat rapi
+    
+    const descText = acc.description ? `\n📝 Spesifikasi: _${acc.description}_` : '';
+    const sentMsg = await ctx.reply(`🔐 Username: \`${acc.username}\`\n🔑 Password: \`${decryptedPass}\`${descText}\n\n_(Pesan ini akan otomatis terhapus dalam 25 detik)_`, { parse_mode: 'Markdown' });
+    
+    // Auto-delete pesan berisi password setelah 25 detik (25000 ms)
+    setTimeout(() => {
+      ctx.telegram.deleteMessage(ctx.chat.id, sentMsg.message_id).catch(() => {});
+    }, 25000);
+  } catch(e) {
+    await ctx.answerCbQuery("Gagal membuka password (Kunci Enkripsi mungkin berubah)");
+    console.error(e);
+  }
+});
+
+
+// ================= FITUR EDIT SPESIFIKASI =================
+bot.command('change', async (ctx) => {
+  const buttons = [
+    [Markup.button.callback('📝 Ubah Spesifikasi', 'CMD_CHANGE_SPEC')],
+    [Markup.button.callback('🔑 Ubah Password', 'CMD_CHANGE_PASS')]
+  ];
+  await ctx.reply('Menu Perubahan Data:', {
+    message_thread_id: ctx.message.message_thread_id,
+    ...Markup.inlineKeyboard(buttons)
+  });
+});
+
+bot.action('CMD_CHANGE_SPEC', async (ctx) => {
+  const accRes = await getAccounts();
+  const gamesRes = await getMasterGames();
+  
+  if (!accRes.success || accRes.data.length === 0) {
+    return ctx.answerCbQuery('Belum ada akun di database.', { show_alert: true });
+  }
+
+  const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
+  const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
+
+  const buttons = activeGames.map(game => 
+    [Markup.button.callback(`🎮 ${game.name}`, `CHG_GAME_${game.id}`)]
+  );
+
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('Pilih game untuk mengedit spesifikasi akun:', {
+    ...Markup.inlineKeyboard(buttons)
+  }).catch(()=>{});
+});
+
+bot.action('CMD_CHANGE_PASS', async (ctx) => {
+  const accRes = await getAccounts();
+  const gamesRes = await getMasterGames();
+  
+  if (!accRes.success || accRes.data.length === 0) {
+    return ctx.answerCbQuery('Belum ada akun di database.', { show_alert: true });
+  }
+
+  const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
+  const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
+
+  const buttons = activeGames.map(game => 
+    [Markup.button.callback(`🎮 ${game.name}`, `CHGPASS_GAME_${game.id}`)]
+  );
+
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('Pilih game untuk mereset password akunnya:', {
+    ...Markup.inlineKeyboard(buttons)
+  }).catch(()=>{});
+});
+
+bot.action(/^CHG_GAME_(.+)$/, async (ctx) => {
+  const gameId = ctx.match[1];
+  const accRes = await getAccounts();
+  
+  if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
+  
+  const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
+  if (gameAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+  
+  const buttons = gameAccounts.map(acc => {
+    const label = `${acc.username}`;
+    return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHG_ACC_${acc.id}`)];
+  });
+
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('Pilih akun yang spesifikasinya ingin diubah:', {
+    ...Markup.inlineKeyboard(buttons)
+  }).catch(()=>{});
+});
+
+bot.action(/^CHGPASS_GAME_(.+)$/, async (ctx) => {
+  const gameId = ctx.match[1];
+  const accRes = await getAccounts();
+  
+  if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
+  
+  const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
+  if (gameAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+  
+  const buttons = gameAccounts.map(acc => {
+    const label = `${acc.username}`;
+    return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHGPASS_ACC_${acc.id}`)];
+  });
+
+  await ctx.answerCbQuery();
+  await ctx.editMessageText('Pilih akun yang passwordnya ingin Anda ganti:', {
+    ...Markup.inlineKeyboard(buttons)
+  }).catch(()=>{});
+});
+
+
+bot.action(/^CHG_ACC_(.+)$/, async (ctx) => {
+  const accId = ctx.match[1];
+  
+  ctx.session ??= {};
+  ctx.session.isEditingSpec = true;
+  ctx.session.passEditStep = null; // Clear state lain
+  ctx.session.isAddingAccount = false; // Clear state lain
+  ctx.session.editSpecAccountId = accId;
+
+  await ctx.answerCbQuery();
+  await ctx.deleteMessage().catch(()=>{});
+  
+  await ctx.reply("📝 **Mode Edit Spesifikasi**\n\nSilakan masukkan teks spesifikasi baru untuk akun ini:\n_(Kirim teks seperti biasa. Ketik '-' untuk mengosongkan deskripsi)_", { parse_mode: 'Markdown' });
+});
+
+bot.action(/^CHGPASS_ACC_(.+)$/, async (ctx) => {
+  const accId = ctx.match[1];
+  
+  ctx.session ??= {};
+  ctx.session.passEditStep = 'OLD_PASS';
+  ctx.session.isEditingSpec = false; // Clear state lain
+  ctx.session.isAddingAccount = false; // Clear state lain
+  ctx.session.editPassAccountId = accId;
+
+  await ctx.answerCbQuery();
+  await ctx.deleteMessage().catch(()=>{});
+  
+  await ctx.reply("🔒 **Verifikasi Keamanan**\n\nUntuk mengubah password, silakan ketik **Password Lama** akun ini terlebih dahulu:", { parse_mode: 'Markdown' });
+});
+
 // ================= CORE UPLOAD & SORTER =================
 const mediaGroupLabels = {};
 
@@ -275,6 +663,163 @@ bot.on('message', async (ctx) => {
     
     // Jangan proses command text
     if (msg.text && msg.text.startsWith('/')) return;
+
+    // === INTERSEPTOR: Edit Spesifikasi Akun ===
+    if (ctx.session?.isEditingSpec && msg.text) {
+      let newDesc = msg.text.trim();
+      if (newDesc === '-') newDesc = ''; // Hapus deskripsi jika input '-'
+      
+      const accId = ctx.session.editSpecAccountId;
+      
+      await updateAccount(accId, {
+        description: newDesc
+      });
+      
+      // Mengirimkan Notifikasi Perubahan ke Topik Game Center
+      const targetTopic = config.TOPICS.TOPIC_ACCOUNTS;
+      if (targetTopic) {
+        const accRes = await getAccounts();
+        const acc = accRes.success ? accRes.data.find(a => a.id === accId) : null;
+        if (acc) {
+          const gamesRes = await getMasterGames();
+          const game = gamesRes.success ? gamesRes.data.find(g => g.id === acc.gameId) : null;
+          const gameName = game ? game.name : "Unknown";
+          
+          await ctx.telegram.sendMessage(config.CHAT_ID, `🔄 **Spesifikasi Akun Diperbarui**\n\nGame: ${gameName}\n📝 Spesifikasi Baru: ${newDesc || '-'}\nUser: \`${acc.username}\``, {
+            parse_mode: 'Markdown',
+            message_thread_id: targetTopic
+          }).catch(err => console.error("Gagal forward update spesifikasi:", err.message));
+        }
+      }
+
+      ctx.session.isEditingSpec = false;
+      ctx.session.editSpecAccountId = null;
+      
+      await ctx.deleteMessage().catch(()=>{});
+      return ctx.reply('✅ Spesifikasi akun berhasil diperbarui!');
+    }
+
+    // === INTERSEPTOR: Edit Password Akun ===
+    if (ctx.session?.passEditStep && msg.text) {
+      const inputPass = msg.text.trim();
+      const accId = ctx.session.editPassAccountId;
+      
+      // Hapus pesan teks chat agar aman
+      await ctx.deleteMessage().catch(()=>{});
+      
+      if (ctx.session.passEditStep === 'OLD_PASS') {
+        const accRes = await getAccounts();
+        const acc = accRes.success ? accRes.data.find(a => a.id === accId) : null;
+        
+        if (!acc) {
+           ctx.session.passEditStep = null;
+           return ctx.reply("❌ Gagal: Akun tidak ditemukan.");
+        }
+        
+        try {
+           const decryptedPass = decryptPassword(acc.password);
+           if (inputPass !== decryptedPass) {
+              ctx.session.passEditStep = null;
+              return ctx.reply("❌ **Verifikasi Gagal!** Password lama yang Anda masukkan salah. Proses dibatalkan.", { parse_mode: 'Markdown' });
+           }
+           
+           ctx.session.passEditStep = 'NEW_PASS';
+           return ctx.reply("✅ **Terverifikasi!**\n\nSekarang silakan ketik **Password Baru** untuk akun ini:\n_(Sandi baru akan langsung dienkripsi)_", { parse_mode: 'Markdown' });
+        } catch (e) {
+           ctx.session.passEditStep = null;
+           return ctx.reply("❌ Gagal mendekripsi password lama (Kunci Enkripsi mungkin berubah).");
+        }
+      }
+      
+      else if (ctx.session.passEditStep === 'NEW_PASS') {
+        const newEncryptedPass = encryptPassword(inputPass);
+        
+        await updateAccount(accId, {
+          password: newEncryptedPass
+        });
+        
+        // Mengirimkan Notifikasi Perubahan ke Topik Game Center
+        const targetTopic = config.TOPICS.TOPIC_ACCOUNTS;
+        if (targetTopic) {
+          const accRes = await getAccounts();
+          const acc = accRes.success ? accRes.data.find(a => a.id === accId) : null;
+          if (acc) {
+            const gamesRes = await getMasterGames();
+            const game = gamesRes.success ? gamesRes.data.find(g => g.id === acc.gameId) : null;
+            const gameName = game ? game.name : "Unknown";
+            
+            await ctx.telegram.sendMessage(config.CHAT_ID, `🔄 **Password Akun Diperbarui**\n\nGame: ${gameName}\n📝 Spesifikasi: ${acc.description || '-'}\nUser: \`${acc.username}\`\nStatus: Password Baru Terenkripsi 🔐`, {
+              parse_mode: 'Markdown',
+              message_thread_id: targetTopic
+            }).catch(err => console.error("Gagal forward update password:", err.message));
+          }
+        }
+
+        ctx.session.passEditStep = null;
+        ctx.session.editPassAccountId = null;
+        
+        return ctx.reply('✅ Password akun berhasil diperbarui dan dienkripsi ulang!');
+      }
+    }
+
+    // === INTERSEPTOR: Tambah Akun Game ===
+    if (ctx.session?.isAddingAccount && msg.text) {
+      if (ctx.session.saveStep === 'WAITING_DESC') {
+        ctx.session.tempDesc = msg.text.trim();
+        ctx.session.saveStep = 'WAITING_CREDS';
+        
+        // Hapus pesan deskripsi agar chat tetap rapi
+        await ctx.deleteMessage().catch(()=>{}); 
+        
+        return ctx.reply("✅ Spesifikasi tersimpan.\n\nSekarang masukkan Username/Email dan Password (pisahkan dengan spasi):\nContoh: `user@email.com pass123`", { parse_mode: 'Markdown' });
+      }
+      else if (ctx.session.saveStep === 'WAITING_CREDS') {
+        const input = msg.text.trim().split(/\s+/);
+        if (input.length < 2) {
+          return ctx.reply("❌ Format salah. Harus ada username dan password dipisah dengan spasi.");
+        }
+        
+        const user = input[0];
+        const passwordRaw = input.slice(1).join(' ');
+        
+        const encryptedPass = encryptPassword(passwordRaw);
+        const desc = ctx.session.tempDesc; // Simpan ke variabel lokal dulu
+        
+        await saveAccount({ 
+          gameId: ctx.session.selectedGame,
+          description: desc,
+          username: user, 
+          password: encryptedPass 
+        });
+        
+        ctx.session.isAddingAccount = false; // Reset session
+        ctx.session.saveStep = null;
+        ctx.session.tempDesc = null;
+        
+        // Hapus pesan teks user agar password mentah tidak tertinggal di chat
+        await ctx.deleteMessage().catch(err => console.error("Gagal hapus pesan input:", err.message));
+        
+        // Forward ke topic akun jika ada
+        const targetTopic = config.TOPICS.TOPIC_ACCOUNTS;
+        if (targetTopic) {
+          const gamesRes = await getMasterGames();
+          let gameName = "Unknown";
+          if (gamesRes.success) {
+            const matched = gamesRes.data.find(g => g.id === ctx.session.selectedGame);
+            if (matched) gameName = matched.name;
+          }
+
+          await ctx.telegram.sendMessage(config.CHAT_ID, `🎮 **Akun Game Baru Ditambahkan**\n\nGame: ${gameName}\n📝 Spesifikasi: ${desc || '-'}\nUser: \`${user}\`\nStatus: Terenkripsi 🔐`, {
+            parse_mode: 'Markdown',
+            message_thread_id: targetTopic
+          }).catch(err => console.error("Gagal forward info akun:", err.message));
+        }
+        
+        return ctx.reply('✅ Akun beserta spesifikasinya berhasil disimpan ke database!');
+      }
+    }
+    // =====================================
+
     if (!msg.document && !msg.photo && !msg.video) return;
 
     const chatId = msg.chat.id;
