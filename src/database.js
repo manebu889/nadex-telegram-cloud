@@ -181,13 +181,29 @@ async function updateDocument(collectionName, docId, updatedFields) {
   }
 }
 
+async function deleteDocument(collectionName, docId) {
+  if (!dbFirestore) return { success: false, data: null, message: 'Firestore is not connected' };
+  try {
+    const docRef = dbFirestore.collection(collectionName).doc(docId);
+    await docRef.delete();
+    return { success: true, data: null, message: `Document deleted` };
+  } catch (error) {
+    return { success: false, data: null, message: error.message };
+  }
+}
+
 async function updateAccount(accId, updatedFields) {
   return await updateDocument('account', accId, updatedFields);
+}
+
+async function deleteAccount(accId) {
+  return await deleteDocument('account', accId);
 }
 
 module.exports = { 
   readDB, saveDB, deleteLabel, 
   addDocument, saveAccount, 
   getDocuments, getMasterGames, getAccounts,
-  updateDocument, updateAccount
+  updateDocument, updateAccount,
+  deleteDocument, deleteAccount
 };
