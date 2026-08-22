@@ -571,7 +571,7 @@ bot.on('message', async (ctx) => {
           const game = gamesRes.success ? gamesRes.data.find(g => g.id === acc.gameId) : null;
           const gameName = game ? game.name : "Unknown";
           
-          await ctx.telegram.sendMessage(config.CHAT_ID, `🔄 **Spesifikasi Akun Diperbarui**\n\nGame: ${gameName}\nUser: \`${acc.username}\`\n📝 Spesifikasi Baru: ${newDesc || '-'}`, {
+          await ctx.telegram.sendMessage(config.CHAT_ID, `🔄 **Spesifikasi Akun Diperbarui**\n\nGame: ${gameName}\n📝 Spesifikasi Baru: ${newDesc || '-'}\nUser: \`${acc.username}\``, {
             parse_mode: 'Markdown',
             message_thread_id: targetTopic
           }).catch(err => console.error("Gagal forward update spesifikasi:", err.message));
