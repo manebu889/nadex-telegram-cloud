@@ -339,6 +339,7 @@ bot.action(/^SEL_GAME_(.+)$/, async (ctx) => {
   ctx.session.selectedGame = gameId;
 
   await ctx.answerCbQuery();
+  await ctx.deleteMessage().catch(()=>{}); // Hapus opsi agar chat rapi
   await ctx.reply(`Game telah dipilih.\n\nSilakan masukkan Spesifikasi/Deskripsi akun ini:\nContoh: _Akun Smurf Tier Mythic_`, { parse_mode: 'Markdown' });
 });
 
@@ -386,6 +387,7 @@ bot.action(/^CHK_GAME_(.+)$/, async (ctx) => {
   });
 
   await ctx.answerCbQuery();
+  await ctx.deleteMessage().catch(()=>{}); // Hapus opsi agar chat rapi
   await ctx.reply('Daftar Akun:\nPilih akun yang ingin Anda lihat detailnya:', {
     ...Markup.inlineKeyboard(buttons)
   });
@@ -401,6 +403,7 @@ bot.action(/^CHK_ACC_(.+)$/, async (ctx) => {
   try {
     const decryptedPass = decryptPassword(acc.password);
     await ctx.answerCbQuery("Mengambil password...");
+    await ctx.deleteMessage().catch(()=>{}); // Hapus opsi agar chat rapi
     
     const descText = acc.description ? `\n📝 Spesifikasi: _${acc.description}_` : '';
     const sentMsg = await ctx.reply(`🔐 Username: \`${acc.username}\`\n🔑 Password: \`${decryptedPass}\`${descText}\n\n_(Pesan ini akan otomatis terhapus dalam 25 detik)_`, { parse_mode: 'Markdown' });
