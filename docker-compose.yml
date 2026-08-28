@@ -7,4 +7,4 @@ services:
     env_file:
       - .env
     volumes:
-      - /mnt/hdd/telegram-uploads:/mnt/hdd/telegram-uploads
+      - ${HOST_UPLOAD_DIR:-/mnt/hdd/telegram-uploads}:/mnt/hdd/telegram-uploads
