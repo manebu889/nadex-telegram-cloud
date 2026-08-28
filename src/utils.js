@@ -32,7 +32,7 @@ async function downloadFile(url, dest) {
 function getFileCategory(fileName) {
   const ext = path.extname(fileName).toLowerCase();
   const picturesExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
-  const projectExt = ['.zip', '.rar', '.tar', '.gz', '.7z', '.cdr', '.psd'];
+  const projectExt = ['.zip', '.rar', '.tar', '.gz', '.7z', '.cdr', '.psd', '.aep', '.kra'];
   const documentExt = ['.pdf', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'];
 
   if (picturesExt.includes(ext)) return 'photo';
