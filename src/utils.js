@@ -2,11 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const crypto = require('crypto');
+const { Markup } = require('telegraf');
 
 function getTopicIdByExtension(fileName, topicsConfig) {
   const ext = path.extname(fileName).toLowerCase();
   const picturesExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
-  const projectExt = ['.zip', '.rar', '.tar', '.gz', '.7z', '.cdr', '.psd'];
+  const projectExt = ['.zip', '.rar', '.tar', '.gz', '.7z', '.cdr', '.psd', '.aep', '.kra'];
   const documentExt = ['.pdf', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'];
   
   if (picturesExt.includes(ext) && topicsConfig.TOPIC_PICTURES) return topicsConfig.TOPIC_PICTURES;
@@ -31,7 +32,7 @@ async function downloadFile(url, dest) {
 function getFileCategory(fileName) {
   const ext = path.extname(fileName).toLowerCase();
   const picturesExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg'];
-  const projectExt = ['.zip', '.rar', '.tar', '.gz', '.7z', '.cdr', '.psd'];
+  const projectExt = ['.zip', '.rar', '.tar', '.gz', '.7z', '.cdr', '.psd', '.aep', '.kra'];
   const documentExt = ['.pdf', '.docx', '.ppt', '.pptx', '.xls', '.xlsx', '.txt'];
 
   if (picturesExt.includes(ext)) return 'photo';
@@ -97,11 +98,74 @@ function formatDate(timestamp) {
   return `${d}-${m}-${y}`;
 }
 
+async function sendPage(ctx, results, label, page) {
+  const ITEMS_PER_PAGE = 5;
+  const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE) || 1;
+  const startIndex = (page - 1) * ITEMS_PER_PAGE;
+  const paginated = results.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  
+  const replyOpts = {
+    message_thread_id: ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id
+  };
+
+  const keyboard = [];
+  
+  for (const item of paginated) {
+     keyboard.push([Markup.button.callback(`📥 Unduh: ${item.fileName}`, `dl_${item.id}`)]);
+  }
+  
+  const navButtons = [];
+  const shortLabel = label.substring(0, 20); 
+  if (page > 1) navButtons.push(Markup.button.callback('⬅️ Prev', `p_${page - 1}_${shortLabel}`));
+  if (page < totalPages) navButtons.push(Markup.button.callback('Next ➡️', `p_${page + 1}_${shortLabel}`));
+  if (navButtons.length > 0) keyboard.push(navButtons);
+
+  const textMsg = `🔍 Ditemukan **${results.length}** file untuk pencarian '*${label}*'\nMenampilkan hal ${page}/${totalPages}.\n\n*Silakan klik file di bawah ini untuk memanggilnya:*`;
+
+  if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('p_')) {
+    await ctx.editMessageText(textMsg, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) }).catch(()=>{});
+  } else {
+    await ctx.telegram.sendMessage(ctx.chat.id, textMsg, { parse_mode: 'Markdown', ...replyOpts, ...Markup.inlineKeyboard(keyboard) });
+  }
+}
+
+async function sendHistoryPage(ctx, results, page) {
+  const ITEMS_PER_PAGE = 5;
+  const totalPages = Math.ceil(results.length / ITEMS_PER_PAGE) || 1;
+  const startIndex = (page - 1) * ITEMS_PER_PAGE;
+  const paginated = results.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  
+  const replyOpts = {
+    message_thread_id: ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id
+  };
+
+  const keyboard = [];
+  
+  for (const item of paginated) {
+     keyboard.push([Markup.button.callback(`📥 Unduh: ${item.fileName}`, `dl_${item.id}`)]);
+  }
+  
+  const navButtons = [];
+  if (page > 1) navButtons.push(Markup.button.callback('⬅️ Prev', `h_${page - 1}`));
+  if (page < totalPages) navButtons.push(Markup.button.callback('Next ➡️', `h_${page + 1}`));
+  if (navButtons.length > 0) keyboard.push(navButtons);
+
+  const textMsg = `🕒 **Riwayat File Terupload** (Terbaru - Terlama)\nTotal: **${results.length}** file\nMenampilkan hal ${page}/${totalPages}.\n\n*Silakan klik file di bawah ini untuk memanggilnya:*`;
+
+  if (ctx.callbackQuery && ctx.callbackQuery.data.startsWith('h_')) {
+    await ctx.editMessageText(textMsg, { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) }).catch(()=>{});
+  } else {
+    await ctx.telegram.sendMessage(ctx.chat.id, textMsg, { parse_mode: 'Markdown', ...replyOpts, ...Markup.inlineKeyboard(keyboard) });
+  }
+}
+
 module.exports = { 
   getTopicIdByExtension, 
   downloadFile, 
   getFileCategory,
   encryptPassword,
   decryptPassword,
-  formatDate
+  formatDate,
+  sendPage,
+  sendHistoryPage
 };
