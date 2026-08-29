@@ -1,119 +1,100 @@
-const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
-const fs = require('fs');
-const path = require('path');
+const mongoose = require('mongoose');
 const config = require('./config');
 
-let dbFirestore;
-let serviceAccount;
+// Ambil URI dari config, jika kosong gunakan default docker-compose
+const mongoURI = config.MONGODB_URI || 'mongodb://mongodb:27017/nadex';
 
-const envCred = config.FIREBASE_CREDENTIALS;
+mongoose.connect(mongoURI).then(() => {
+    console.log("[INFO] Database MongoDB berhasil terhubung!");
+}).catch(err => {
+    console.error("⚠️ [ERROR] Gagal terhubung ke MongoDB:", err.message);
+});
 
-if (envCred) {
-  if (envCred.startsWith('{')) {
-    try {
-      serviceAccount = JSON.parse(envCred);
-    } catch (e) {
-      console.error("⚠️ [ERROR] Gagal mem-parsing JSON dari variabel FIREBASE_CREDENTIALS di .env");
-    }
-  } else {
-    const resolvedPath = path.resolve(__dirname, '..', envCred);
-    if (fs.existsSync(resolvedPath)) {
-      serviceAccount = require(resolvedPath);
-    } else {
-      console.error(`⚠️ [ERROR] File credential Firebase tidak ditemukan di path: ${resolvedPath}`);
-    }
-  }
+// ============================================
+// MODEL MONGOOSE (Dibuat semirip mungkin dengan Firestore)
+// strict: false memungkinkan objek JSON bebas seperti Firestore
+// ============================================
+const FileModel = mongoose.model('files', new mongoose.Schema({
+    createdAt: { type: Number, default: Date.now }
+}, { strict: false }));
+
+const AccountModel = mongoose.model('account', new mongoose.Schema({
+    createdAt: { type: Number, default: Date.now }
+}, { strict: false }));
+
+const GameModel = mongoose.model('master_games', new mongoose.Schema({
+    createdAt: { type: Number, default: Date.now }
+}, { strict: false }));
+
+// Fungsi pemetaan nama collection ke Model Mongoose
+function getModel(collectionName) {
+    if (collectionName === 'files') return FileModel;
+    if (collectionName === 'account') return AccountModel;
+    if (collectionName === 'master_games') return GameModel;
+    
+    // Fallback model dinamis jika ada collection baru
+    return mongoose.model(collectionName, new mongoose.Schema({
+        createdAt: { type: Number, default: Date.now }
+    }, { strict: false }));
 }
 
-if (serviceAccount) {
-  try {
-    initializeApp({
-      credential: cert(serviceAccount)
-    });
-    dbFirestore = getFirestore();
-    console.log("[INFO] Firebase Firestore berhasil diinisialisasi melalui credential.");
-  } catch (error) {
-    console.error("⚠️ [ERROR] Gagal menginisialisasi Firebase:", error.message);
-  }
-}
+// ============================================
+// FUNGSI-FUNGSI DATABASE UTAMA
+// (Semua output disamakan 100% dengan versi Firestore lama)
+// ============================================
 
 async function readDB() {
-  if (!dbFirestore) return [];
   try {
-    const snapshot = await dbFirestore.collection('files').get();
-    const data = [];
-    snapshot.forEach(doc => {
-      data.push({ id: doc.id, ...doc.data() });
-    });
+    const data = await FileModel.find().lean();
     
-    // Mengurutkan dari yang paling awal diupload (berdasarkan createdAt atau fallback ke topicMsgId)
-    data.sort((a, b) => {
+    // Ubah _id bawaan MongoDB menjadi 'id' agar fitur lain tidak rusak
+    const mapped = data.map(doc => ({ id: doc._id.toString(), ...doc }));
+    
+    mapped.sort((a, b) => {
       const timeDiff = (a.createdAt || 0) - (b.createdAt || 0);
       if (timeDiff !== 0) return timeDiff;
       return (a.topicMsgId || 0) - (b.topicMsgId || 0);
     });
     
-    return data;
+    return mapped;
   } catch (e) {
-    console.error("Gagal membaca database dari Firestore:", e);
+    console.error("Gagal membaca database dari MongoDB:", e);
     return [];
   }
 }
 
 async function saveDB(newData) {
-  if (!dbFirestore) {
-    console.error("Gagal menyimpan: Firebase Firestore belum terhubung.");
-    return;
-  }
   try {
-    // Tambahkan timestamp saat ini untuk keperluan sorting
     newData.createdAt = Date.now();
-    await dbFirestore.collection('files').add(newData);
+    await FileModel.create(newData);
   } catch (e) {
-    console.error("Gagal menyimpan data ke Firestore:", e);
+    console.error("Gagal menyimpan data ke MongoDB:", e);
   }
 }
 
 async function deleteLabel(labelName) {
-  if (!dbFirestore) return [];
   try {
-    const snapshot = await dbFirestore.collection('files').where('label', '==', labelName).get();
-    if (snapshot.empty) return [];
+    const docs = await FileModel.find({ label: labelName }).lean();
+    if (docs.length === 0) return [];
     
-    const batch = dbFirestore.batch();
-    const deletedItems = [];
+    await FileModel.deleteMany({ label: labelName });
     
-    snapshot.docs.forEach((doc) => {
-      deletedItems.push(doc.data());
-      batch.delete(doc.ref);
-    });
-    
-    await batch.commit();
-    return deletedItems;
+    return docs.map(doc => ({ id: doc._id.toString(), ...doc }));
   } catch (e) {
-    console.error("Gagal menghapus label di Firestore:", e);
+    console.error("Gagal menghapus label di MongoDB:", e);
     return [];
   }
 }
 
-/**
- * Fungsi generik dan reusable untuk menambahkan dokumen ke collection apa pun.
- * Mengikuti aturan "API Response Format" di AGENTS.md.
- */
 async function addDocument(collectionName, data) {
-  if (!dbFirestore) {
-    console.error(`[ERROR] Firestore belum terhubung. Gagal menyimpan ke ${collectionName}.`);
-    return { success: false, data: null, message: 'Firestore is not connected' };
-  }
-  
   try {
+    const Model = getModel(collectionName);
     const dataToSave = { ...data, createdAt: Date.now() };
-    const docRef = await dbFirestore.collection(collectionName).add(dataToSave);
+    const saved = await Model.create(dataToSave);
     
     return { 
       success: true, 
-      data: { id: docRef.id, ...dataToSave }, 
+      data: { id: saved._id.toString(), ...saved.toObject() }, 
       message: `Data successfully saved to ${collectionName}` 
     };
   } catch (error) {
@@ -122,26 +103,17 @@ async function addDocument(collectionName, data) {
   }
 }
 
-/**
- * Fungsi generik dan reusable untuk membaca semua dokumen dari collection apa pun.
- */
 async function getDocuments(collectionName) {
-  if (!dbFirestore) {
-    console.error(`[ERROR] Firestore belum terhubung. Gagal membaca ${collectionName}.`);
-    return { success: false, data: null, message: 'Firestore is not connected' };
-  }
-  
   try {
-    const snapshot = await dbFirestore.collection(collectionName).get();
-    const data = [];
-    snapshot.forEach(doc => {
-      data.push({ id: doc.id, ...doc.data() });
-    });
+    const Model = getModel(collectionName);
+    const data = await Model.find().lean();
+    
+    const mapped = data.map(doc => ({ id: doc._id.toString(), ...doc }));
     
     return { 
       success: true, 
-      data: data, 
-      message: `Successfully retrieved ${data.length} documents from ${collectionName}` 
+      data: mapped, 
+      message: `Successfully retrieved ${mapped.length} documents from ${collectionName}` 
     };
   } catch (error) {
     console.error(`[ERROR] Gagal membaca data dari ${collectionName}:`, error);
@@ -149,43 +121,34 @@ async function getDocuments(collectionName) {
   }
 }
 
-/**
- * Fungsi khusus untuk menyimpan akun game
- */
 async function saveAccount(accountData) {
   return await addDocument('account', accountData);
 }
 
-/**
- * Fungsi khusus untuk mengambil semua daftar Master Game
- */
 async function getMasterGames() {
   return await getDocuments('master_games');
 }
 
-/**
- * Fungsi khusus untuk mengambil semua akun yang tersimpan
- */
 async function getAccounts() {
   return await getDocuments('account');
 }
 
 async function updateDocument(collectionName, docId, updatedFields) {
-  if (!dbFirestore) return { success: false, data: null, message: 'Firestore is not connected' };
   try {
-    const docRef = dbFirestore.collection(collectionName).doc(docId);
-    await docRef.update(updatedFields);
-    return { success: true, data: { id: docId, ...updatedFields }, message: `Document updated` };
+    const Model = getModel(collectionName);
+    const updated = await Model.findByIdAndUpdate(docId, updatedFields, { returnDocument: 'after' }).lean();
+    if (!updated) throw new Error("Document not found");
+
+    return { success: true, data: { id: updated._id.toString(), ...updated }, message: `Document updated` };
   } catch (error) {
     return { success: false, data: null, message: error.message };
   }
 }
 
 async function deleteDocument(collectionName, docId) {
-  if (!dbFirestore) return { success: false, data: null, message: 'Firestore is not connected' };
   try {
-    const docRef = dbFirestore.collection(collectionName).doc(docId);
-    await docRef.delete();
+    const Model = getModel(collectionName);
+    await Model.findByIdAndDelete(docId);
     return { success: true, data: null, message: `Document deleted` };
   } catch (error) {
     return { success: false, data: null, message: error.message };

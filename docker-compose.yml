@@ -17,6 +17,15 @@ services:
         custom: Nadex Monitoring
       icon: "https://cdn3.iconfinder.com/data/icons/popular-services-brands-vol-2/512/telegram-512.png"
 
+  mongodb:
+    image: mongo:4.4.18
+    container_name: Nadex-DB
+    restart: unless-stopped
+    volumes:
+      - ./mongo_data:/data/db
+    ports:
+      - "27017:27017"
+
 x-casaos:
   architectures:
     - amd64

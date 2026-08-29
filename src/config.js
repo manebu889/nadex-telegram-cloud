@@ -9,8 +9,8 @@ const config = {
   WATCH_DIR: process.env.WATCH_DIR,
   DELETE_AFTER_UPLOAD: process.env.DELETE_AFTER_UPLOAD === 'true',
 
-  // Firebase Config
-  FIREBASE_CREDENTIALS: process.env.FIREBASE_CREDENTIALS,
+  // Database Config
+  MONGODB_URI: process.env.MONGODB_URI,
   
   // Security Config
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,

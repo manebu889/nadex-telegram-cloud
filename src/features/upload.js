@@ -4,6 +4,20 @@ const { saveDB } = require('../database');
 const { getTopicIdByExtension, downloadFile, getFileCategory } = require('../utils');
 
 const mediaGroupLabels = {};
+let downloadQueue = Promise.resolve();
+
+// Helper untuk retry fungsi API Telegram yang gagal karena dikeroyok banyak file (Multiple Upload)
+async function withRetry(fn, retries = 4) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      // Beri jeda acak 1-3 detik agar tidak tabrakan dengan file lain
+      await new Promise(r => setTimeout(r, 1000 + Math.random() * 2000));
+    }
+  }
+}
 
 module.exports = (bot) => {
   bot.on('message', async (ctx, next) => {
@@ -28,7 +42,6 @@ module.exports = (bot) => {
         } else {
           // [FIX] Mengatasi Race Condition Telegram
           // Telegram mengirim file dalam satu album secara bersamaan.
-          // File tanpa caption akan disuruh 'menunggu' maksimal 3 detik sampai file yang memiliki caption menetapkan labelnya.
           let retries = 0;
           while (!mediaGroupLabels[msg.media_group_id] && retries < 15) {
             await new Promise(r => setTimeout(r, 200));
@@ -59,33 +72,44 @@ module.exports = (bot) => {
 
       if (!fileId) return next();
 
-      const fileLink = await ctx.telegram.getFileLink(fileId);
+      // [FIX] Gunakan retry untuk getFileLink karena Telegram membatasi API jika file dikirim serentak
+      const fileLink = await withRetry(() => ctx.telegram.getFileLink(fileId));
       
       let ext = path.extname(originalFileName) || path.extname(fileLink.pathname) || '';
       ext = ext.toLowerCase();
-      // Tentukan kategori dari file yang diupload (document, photo, project)
+      
       const categoryName = getFileCategory(originalFileName || fileLink.pathname);
 
       let fileName = '';
       if (categoryName === 'document' || categoryName === 'project') {
-        // Khusus Document & Project: [label]-[nama_file_asli]
         fileName = `${safeLabel}-${originalFileName}`;
       } else {
-        // Khusus Photo & Video: [label]-[kategori]_[id].[ext]
         fileName = `${safeLabel}-${categoryName}_${msg.message_id}${ext}`;
       }
 
       const destPath = path.join(config.WATCH_DIR, fileName);
       
-      await downloadFile(fileLink.href, destPath);
+      // [FIX] Sistem Antrean (Queue) Download
+      // Mencegah jaringan STB mati/timeout karena mendownload banyak file secara bersamaan
+      await new Promise((resolve, reject) => {
+        downloadQueue = downloadQueue.then(async () => {
+          try {
+            await downloadFile(fileLink.href, destPath);
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        }).catch(reject); // tangkap error sebelumnya agar antrean tidak macet selamanya
+      });
 
       const targetTopicId = getTopicIdByExtension(fileName, config.TOPICS);
 
       if (targetTopicId) {
         try {
-          const copiedMsg = await ctx.telegram.copyMessage(config.CHAT_ID, config.CHAT_ID, msg.message_id, {
+          // [FIX] Gunakan retry untuk copyMessage agar tidak gagal
+          const copiedMsg = await withRetry(() => ctx.telegram.copyMessage(config.CHAT_ID, config.CHAT_ID, msg.message_id, {
             message_thread_id: targetTopicId
-          });
+          }));
           
           await saveDB({ fileId, fileName, type: fileType, label, topicId: targetTopicId, topicMsgId: copiedMsg.message_id });
 
@@ -98,7 +122,7 @@ module.exports = (bot) => {
           }
           
         } catch (err) {
-          if (!err.message.includes('MESSAGE_ID_INVALID') && !err.message.includes('message to copy not found')) {
+          if (err && err.message && !err.message.includes('MESSAGE_ID_INVALID') && !err.message.includes('message to copy not found')) {
             console.error(`[ERROR] Gagal memproses: ${err.message}`);
           }
         }
@@ -112,7 +136,7 @@ module.exports = (bot) => {
         }
       }
     } catch (error) {
-      console.error(`[ERROR UMUM] Terjadi kesalahan:`, error.message);
+      console.error(`[ERROR UMUM] Terjadi kesalahan:`, error ? error.message || error : 'Unknown Error');
     }
     
     return next();

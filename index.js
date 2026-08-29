@@ -25,11 +25,15 @@ const startDashboard = require('./src/dashboard/server');
 // Jalankan Web Monitoring Server di Port 3000
 startDashboard(3000);
 
-bot.launch().then(() => {
-    console.log("[INFO] Bot Telegram Berjalan (Dengan Filter Ekstensi & Auto-Rename)!");
-}).catch((err) => {
-    console.error("[ERROR] Gagal meluncurkan bot:", err);
-});
+function launchBot() {
+    bot.launch().then(() => {
+        console.log("[INFO] Bot Telegram Berjalan (Dengan Filter Ekstensi & Auto-Rename)!");
+    }).catch((err) => {
+        console.error("[ERROR] Gagal meluncurkan bot (Koneksi Terputus). Mencoba lagi dalam 5 detik...");
+        setTimeout(launchBot, 5000);
+    });
+}
+launchBot();
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
