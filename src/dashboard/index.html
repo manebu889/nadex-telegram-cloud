@@ -43,7 +43,17 @@
         }
     </script>
 
-    <style>
+    <style type="text/tailwindcss">
+        @layer components {
+            .card {
+                @apply relative overflow-hidden bg-panel border border-line rounded-2xl p-4 sm:p-6 h-full w-full;
+                transition: border-color .3s ease, transform .3s ease, box-shadow .3s ease;
+            }
+            .card:hover {
+                transform: translateY(-3px);
+                border-color: rgba(94, 234, 212, 0.35);
+            }
+        }
         body {
             background-color: #080b12;
             background-image:
@@ -52,13 +62,6 @@
         }
         .glow-border {
             box-shadow: 0 0 0 1px rgba(255,255,255,0.03), 0 20px 40px -20px rgba(0,0,0,0.6);
-        }
-        .card-ring {
-            transition: border-color .3s ease, transform .3s ease, box-shadow .3s ease;
-        }
-        .card-ring:hover {
-            transform: translateY(-3px);
-            border-color: rgba(94, 234, 212, 0.35);
         }
         .num-flicker {
             font-variant-numeric: tabular-nums;
@@ -114,7 +117,7 @@
                 </span>
                 <span class="font-mono text-xs uppercase tracking-wider"
                       :class="isOnline ? 'text-good' : 'text-bad'"
-                      x-text="isOnline ? 'System Online' : 'System Offline'"></span>
+                      x-text="isOnline ? 'Online' : 'Offline'"></span>
             </div>
         </header>
 
@@ -122,7 +125,7 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
 
             <!-- Card 1: Server Uptime -->
-            <div class="relative overflow-hidden card-ring bg-panel border border-line rounded-2xl p-6 flex flex-col justify-between min-h-[180px]">
+            <!-- <div class="card flex flex-col justify-between">
                 <div class="flex items-center justify-between">
                     <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Server Uptime</span>
                     <div class="w-8 h-8 rounded-lg bg-accent2/10 flex items-center justify-center">
@@ -135,10 +138,10 @@
                     <div class="font-display font-semibold text-3xl text-white num-flicker" x-text="formatUptime(stats.uptime)">—</div>
                     <p class="text-muted text-xs mt-2">Waktu aktif tanpa henti</p>
                 </div>
-            </div>
+            </div> -->
 
             <!-- Card 2: Memory Usage (radial gauge signature) -->
-            <div class="relative overflow-hidden card-ring bg-panel border border-line rounded-2xl p-6 flex items-center justify-between min-h-[180px]">
+            <div class="card flex items-center justify-between">
                 <div class="flex flex-col justify-between h-full">
                     <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Memory RAM</span>
                     <div>
@@ -157,13 +160,13 @@
                                 class="transition-all duration-1000 ease-out"/>
                     </svg>
                     <div class="absolute inset-0 flex items-center justify-center">
-                        <span class="font-display font-semibold text-lg text-white" x-text="stats.memory.percent + '%'">0%</span>
+                         <span class="font-display font-semibold text-sm text-white" x-text="Math.floor(stats.memory.percent) + '%'">0%</span>
                     </div>
                 </div>
             </div>
 
             <!-- Card 3: Master Games -->
-            <div class="relative overflow-hidden card-ring bg-panel border border-line rounded-2xl p-6 flex flex-col justify-between min-h-[180px]">
+            <div class="card flex flex-col justify-between">
                 <div class="flex items-center justify-between">
                     <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Master Games</span>
                     <div class="w-8 h-8 rounded-lg bg-good/10 flex items-center justify-center">
@@ -179,7 +182,7 @@
             </div>
 
             <!-- Card 4: Storage Stats -->
-            <div class="relative overflow-hidden card-ring bg-panel border border-line rounded-2xl p-6 flex flex-col justify-between min-h-[180px]">
+            <div class="card flex flex-col justify-between">
                 <div class="flex items-center justify-between">
                     <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Storage Stats</span>
                     <div class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -200,6 +203,7 @@
                     </div>
                 </div>
             </div>
+            
 
         </div>
 
@@ -207,8 +211,8 @@
         <div class="mt-10 pt-6 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
             <p class="text-muted font-mono">NADEX CLOUD BOT — REALTIME MONITOR</p>
             <p class="text-muted font-mono">
-                Terakhir diperbarui:
-                <span class="text-ink" x-text="lastUpdate">Belum sinkron</span>
+                Server Uptime:
+                <span class="text-ink" x-text="formatUptimeDigital(stats.uptime)">Belum sinkron</span>
             </p>
         </div>
 
@@ -266,6 +270,17 @@
                     if (m > 0) parts.push(`${m}m`);
                     parts.push(`${s}s`);
                     return parts.join(' ');
+                },
+
+                formatUptimeDigital(seconds) {
+                    if (!seconds) return '00:00:00';
+                    const h = Math.floor(seconds / 3600);
+                    const m = Math.floor((seconds % 3600) / 60);
+                    const s = Math.floor(seconds % 60);
+                    
+                    return [h, m, s]
+                        .map(v => v.toString().padStart(2, '0'))
+                        .join(':');
                 }
             }))
         })
