@@ -136,7 +136,7 @@ async function getAccounts() {
 async function updateDocument(collectionName, docId, updatedFields) {
   try {
     const Model = getModel(collectionName);
-    const updated = await Model.findByIdAndUpdate(docId, updatedFields, { new: true }).lean();
+    const updated = await Model.findByIdAndUpdate(docId, updatedFields, { returnDocument: 'after' }).lean();
     if (!updated) throw new Error("Document not found");
 
     return { success: true, data: { id: updated._id.toString(), ...updated }, message: `Document updated` };
