@@ -135,7 +135,7 @@
                     </div>
                 </div>
                 <div>
-                    <div class="font-display font-semibold text-3xl text-white num-flicker" x-text="formatUptime(stats.uptime)">—</div>
+                    <div class="font-display font-semibold text-3xl text-white num-flicker" x-text="formatUptime(displayUptime)">—</div>
                     <p class="text-muted text-xs mt-2">Waktu aktif tanpa henti</p>
                 </div>
             </div> -->
@@ -212,7 +212,7 @@
             <p class="text-muted font-mono">NADEX CLOUD BOT — REALTIME MONITOR</p>
             <p class="text-muted font-mono">
                 Server Uptime:
-                <span class="text-ink" x-text="formatUptimeDigital(stats.uptime)">Belum sinkron</span>
+                <span class="text-ink" x-text="formatUptimeDigital(displayUptime)">Belum sinkron</span>
             </p>
         </div>
 
@@ -224,6 +224,8 @@
             Alpine.data('dashboard', () => ({
                 isOnline: false,
                 lastUpdate: '-',
+                serverStartTime: null,
+                displayUptime: 0,
                 stats: {
                     uptime: 0,
                     memory: { percent: '0', used: '0', total: '0' },
@@ -238,6 +240,11 @@
                         if (result.success) {
                             this.stats = result.data;
                             this.isOnline = true;
+                            
+                            // Hitung kapan server mulai hidup (hanya set sekali atau jika sinkronisasi perlu)
+                            if (!this.serverStartTime || this.displayUptime === 0) {
+                                this.serverStartTime = Date.now() - (this.stats.uptime * 1000);
+                            }
 
                             const now = new Date();
                             this.lastUpdate = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -252,9 +259,18 @@
 
                 startPolling() {
                     this.fetchData();
+                    
+                    // Polling data server per 5 detik
                     setInterval(() => {
                         this.fetchData();
                     }, 5000);
+
+                    // Ticker super mulus per 1 detik menggunakan waktu internal browser (Date.now)
+                    setInterval(() => {
+                        if (this.isOnline && this.serverStartTime) {
+                            this.displayUptime = Math.floor((Date.now() - this.serverStartTime) / 1000);
+                        }
+                    }, 1000);
                 },
 
                 formatUptime(seconds) {
