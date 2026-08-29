@@ -29,7 +29,7 @@ function startDashboard(port = 3000) {
       const memUsagePercent = ((usedMem / totalMem) * 100).toFixed(2);
 
       const stats = {
-        uptime: process.uptime(), 
+        uptime: os.uptime(), 
         botStatus: 'Online', 
         memory: {
           used: (usedMem / 1024 / 1024 / 1024).toFixed(2) + ' GB',
