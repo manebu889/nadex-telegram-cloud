@@ -79,21 +79,13 @@ module.exports = (bot) => {
   });
 
   bot.command('check', async (ctx) => {
-    const accRes = await getAccounts();
     const gamesRes = await getMasterGames();
     
-    if (!accRes.success || accRes.data.length === 0) {
-      return ctx.reply('Belum ada akun yang tersimpan di database.');
+    if (!gamesRes.success || gamesRes.data.length === 0) {
+      return ctx.reply('Belum ada master game yang tersedia.');
     }
 
-    const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
-    const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
-
-    if (activeGames.length === 0) {
-      return ctx.reply('Belum ada akun yang bisa ditampilkan.');
-    }
-
-    const buttons = activeGames.map(game => 
+    const buttons = gamesRes.data.map(game => 
       [Markup.button.callback(`🎮 ${game.name}`, `CHK_GAME_${game.id}`)]
     );
 
@@ -112,19 +104,36 @@ module.exports = (bot) => {
     const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
     
     if (gameAccounts.length === 0) {
-      return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+      await ctx.answerCbQuery("Tidak ada akun untuk game ini.", { show_alert: true });
+      return;
     }
     
     const buttons = gameAccounts.map(acc => {
       const label = `${acc.username}`;
       return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHK_ACC_${acc.id}`)];
     });
+    buttons.push([Markup.button.callback('🔙 Kembali', 'CHK_BACK')]);
 
     await ctx.answerCbQuery();
-    await ctx.deleteMessage().catch(()=>{});
-    await ctx.reply('Daftar Akun:\nPilih akun yang ingin Anda lihat detailnya:', {
+    await ctx.editMessageText('Daftar Akun:\nPilih akun yang ingin Anda lihat detailnya:', {
       ...Markup.inlineKeyboard(buttons)
-    });
+    }).catch(()=>{});
+  });
+
+  bot.action('CHK_BACK', async (ctx) => {
+    const gamesRes = await getMasterGames();
+    if (!gamesRes.success || gamesRes.data.length === 0) {
+      return ctx.answerCbQuery("Belum ada master game.");
+    }
+
+    const buttons = gamesRes.data.map(game => 
+      [Markup.button.callback(`🎮 ${game.name}`, `CHK_GAME_${game.id}`)]
+    );
+
+    await ctx.answerCbQuery();
+    await ctx.editMessageText('Pilih game untuk melihat daftar akunnya:', {
+      ...Markup.inlineKeyboard(buttons)
+    }).catch(()=>{});
   });
 
   bot.action(/^CHK_ACC_(.+)$/, async (ctx) => {
@@ -137,16 +146,19 @@ module.exports = (bot) => {
     try {
       const decryptedPass = decryptPassword(acc.password);
       await ctx.answerCbQuery("Mengambil password...");
-      await ctx.deleteMessage().catch(()=>{});
       
       const descText = acc.description ? `\n📝 Spesifikasi: _${acc.description}_` : '';
-      const sentMsg = await ctx.reply(`🔐 Username: \`${acc.username}\`\n🔑 Password: \`${decryptedPass}\`${descText}\n\n_(Pesan ini akan otomatis terhapus dalam 25 detik)_`, { parse_mode: 'Markdown' });
+      const text = `🔐 Username: \`${acc.username}\`\n🔑 Password: \`${decryptedPass}\`${descText}\n\n_(Pesan ini akan otomatis terhapus dalam 25 detik)_`;
+      
+      await ctx.editMessageText(text, { parse_mode: 'Markdown' }).catch(()=>{});
       
       setTimeout(() => {
-        ctx.telegram.deleteMessage(ctx.chat.id, sentMsg.message_id).catch(() => {});
+        if (ctx.callbackQuery && ctx.callbackQuery.message) {
+          ctx.telegram.deleteMessage(ctx.chat.id, ctx.callbackQuery.message.message_id).catch(() => {});
+        }
       }, 25000);
     } catch(e) {
-      await ctx.answerCbQuery("Gagal membuka password (Kunci Enkripsi mungkin berubah)");
+      await ctx.answerCbQuery("Gagal membuka password (Kunci Enkripsi mungkin berubah)", { show_alert: true });
       console.error(e);
     }
   });
