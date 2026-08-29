@@ -28,6 +28,22 @@ function startDashboard(port = 3000) {
       const usedMem = totalMem - freeMem;
       const memUsagePercent = ((usedMem / totalMem) * 100).toFixed(2);
 
+      // Mengambil Data Hardisk menggunakan fs.promises.statfs (Node 18+)
+      const fs = require('fs');
+      let diskUsedGB = '0.00 GB', diskTotalGB = '0.00 GB', diskPercent = '0.00';
+      try {
+          const rootPath = os.platform() === 'win32' ? 'C:/' : '/';
+          const diskData = await fs.promises.statfs(rootPath);
+          const diskTotal = diskData.blocks * diskData.bsize;
+          const diskFree = diskData.bfree * diskData.bsize;
+          const diskUsed = diskTotal - diskFree;
+          diskPercent = ((diskUsed / diskTotal) * 100).toFixed(2);
+          diskUsedGB = (diskUsed / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+          diskTotalGB = (diskTotal / 1024 / 1024 / 1024).toFixed(2) + ' GB';
+      } catch (err) {
+          console.error("[ERROR] Gagal membaca disk:", err.message);
+      }
+
       const stats = {
         uptime: os.uptime(), 
         botStatus: 'Online', 
@@ -35,6 +51,11 @@ function startDashboard(port = 3000) {
           used: (usedMem / 1024 / 1024 / 1024).toFixed(2) + ' GB',
           total: (totalMem / 1024 / 1024 / 1024).toFixed(2) + ' GB',
           percent: memUsagePercent
+        },
+        disk: {
+          used: diskUsedGB,
+          total: diskTotalGB,
+          percent: diskPercent
         },
         database: {
           totalGames,

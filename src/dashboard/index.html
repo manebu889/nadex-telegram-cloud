@@ -156,7 +156,7 @@
                         <!-- Info Disk -->
                         <div class="font-mono text-xs text-muted flex items-center gap-2">
                             <span class="w-2 h-2 rounded-full bg-good"></span>
-                            <span>DSK: <span x-text="stats.memory.used">0</span> / <span x-text="stats.memory.total">0</span></span>
+                            <span>DSK: <span x-text="stats.disk.used">0</span> / <span x-text="stats.disk.total">0</span></span>
                         </div>
                     </div>
                 </div>
@@ -184,11 +184,11 @@
                             <circle cx="40" cy="40" r="34" fill="none" stroke="#1c2536" stroke-width="7"/>
                             <circle cx="40" cy="40" r="34" fill="none" stroke="#34d399" stroke-width="7"
                                     stroke-linecap="round" stroke-dasharray="213.6"
-                                    :stroke-dashoffset="213.6 - (213.6 * (parseFloat(stats.memory.percent) || 0) / 100)"
+                                    :stroke-dashoffset="213.6 - (213.6 * (parseFloat(stats.disk.percent) || 0) / 100)"
                                     class="transition-all duration-1000 ease-out"/>
                         </svg>
                         <div class="absolute inset-0 flex items-center justify-center">
-                            <span class="font-display font-semibold text-sm text-white" x-text="Math.floor(stats.memory.percent) + '%'">0%</span>
+                            <span class="font-display font-semibold text-sm text-white" x-text="Math.floor(stats.disk.percent) + '%'">0%</span>
                         </div>
                     </div>
 
