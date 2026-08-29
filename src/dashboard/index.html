@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nadex - Monitoring Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --primary: #3b82f6;
+            --success: #10b981;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 {
+            color: var(--text-main);
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            width: 100%;
+            max-width: 900px;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        .card h2 {
+            font-size: 1.1rem;
+            color: var(--text-muted);
+            margin-top: 0;
+            margin-bottom: 12px;
+        }
+        .value {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        .status-dot {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background-color: var(--success);
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .progress-bar {
+            width: 100%;
+            background-color: #334155;
+            border-radius: 8px;
+            height: 8px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+        .progress-fill {
+            height: 100%;
+            background-color: var(--primary);
+            transition: width 0.5s ease;
+        }
+        .small-text {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 Nadex Bot Monitoring</h1>
+
+    <div class="grid">
+        <!-- Status Card -->
+        <div class="card">
+            <h2>Bot Status</h2>
+            <div class="value" id="bot-status"><span class="status-dot"></span>Online</div>
+            <div class="small-text">Uptime: <span id="uptime">Loading...</span></div>
+        </div>
+
+        <!-- Memory Card -->
+        <div class="card">
+            <h2>Server Memory</h2>
+            <div class="value" id="memory-percent">0%</div>
+            <div class="progress-bar">
+                <div class="progress-fill" id="memory-bar" style="width: 0%;"></div>
+            </div>
+            <div class="small-text" style="margin-top: 8px;"><span id="memory-used">0 GB</span> / <span id="memory-total">0 GB</span></div>
+        </div>
+
+        <!-- Database Stats -->
+        <div class="card">
+            <h2>Master Games</h2>
+            <div class="value" id="total-games">0</div>
+            <div class="small-text">Terdaftar di Firestore</div>
+        </div>
+
+        <div class="card">
+            <h2>Total Akun</h2>
+            <div class="value" id="total-accounts">0</div>
+            <div class="small-text">Disimpan secara aman</div>
+        </div>
+
+        <div class="card">
+            <h2>Total File</h2>
+            <div class="value" id="total-files">0</div>
+            <div class="small-text">File Cloud Storage</div>
+        </div>
+    </div>
+
+    <script>
+        function formatUptime(seconds) {
+            const d = Math.floor(seconds / (3600*24));
+            const h = Math.floor(seconds % (3600*24) / 3600);
+            const m = Math.floor(seconds % 3600 / 60);
+            const s = Math.floor(seconds % 60);
+            
+            const parts = [];
+            if (d > 0) parts.push(`${d}d`);
+            if (h > 0) parts.push(`${h}h`);
+            if (m > 0) parts.push(`${m}m`);
+            parts.push(`${s}s`);
+            return parts.join(' ');
+        }
+
+        async function fetchStats() {
+            try {
+                const res = await fetch('/api/stats');
+                const result = await res.json();
+                
+                if (result.success) {
+                    const data = result.data;
+                    
+                    document.getElementById('bot-status').innerHTML = '<span class="status-dot"></span>' + data.botStatus;
+                    document.getElementById('uptime').innerText = formatUptime(data.uptime);
+                    
+                    document.getElementById('memory-percent').innerText = `${data.memory.percent}%`;
+                    document.getElementById('memory-bar').style.width = `${data.memory.percent}%`;
+                    document.getElementById('memory-used').innerText = data.memory.used;
+                    document.getElementById('memory-total').innerText = data.memory.total;
+
+                    document.getElementById('total-games').innerText = data.database.totalGames;
+                    document.getElementById('total-accounts').innerText = data.database.totalAccounts;
+                    document.getElementById('total-files').innerText = data.database.totalFiles;
+                }
+            } catch (err) {
+                console.error("Gagal mengambil data statistik", err);
+                document.getElementById('bot-status').innerHTML = '<span class="status-dot" style="background-color: #ef4444;"></span>Offline / Error';
+            }
+        }
+
+        fetchStats();
+        setInterval(fetchStats, 5000);
+    </script>
+</body>
+</html>

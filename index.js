@@ -20,8 +20,15 @@ require('./src/features/delete')(bot);
 require('./src/features/gameAccounts')(bot);
 require('./src/features/upload')(bot);
 
+const startDashboard = require('./src/dashboard/server');
+
+// Jalankan Web Monitoring Server di Port 3000
+startDashboard(3000);
+
 bot.launch().then(() => {
     console.log("[INFO] Bot Telegram Berjalan (Dengan Filter Ekstensi & Auto-Rename)!");
+}).catch((err) => {
+    console.error("[ERROR] Gagal meluncurkan bot:", err);
 });
 
 process.once('SIGINT', () => bot.stop('SIGINT'));
