@@ -140,28 +140,58 @@
                 </div>
             </div> -->
 
-            <!-- Card 2: Memory Usage (radial gauge signature) -->
-            <div class="card flex items-center justify-between">
+            <!-- Card 2: System Resources (2 Gauges) -->
+            <div class="card sm:col-span-2 flex items-center justify-between">
+                
+                <!-- Bagian Kiri (Teks) -->
                 <div class="flex flex-col justify-between h-full">
-                    <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Memory RAM</span>
-                    <div>
-                        <div class="font-mono text-xs text-muted">
-                            <span x-text="stats.memory.used">0</span><span class="mx-1">/</span><span x-text="stats.memory.total">0</span>
+                    <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Resources</span>
+                    
+                    <div class="mt-2 space-y-2">
+                        <!-- Info RAM -->
+                        <div class="font-mono text-xs text-muted flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-accent"></span>
+                            <span>RAM: <span x-text="stats.memory.used">0</span> / <span x-text="stats.memory.total">0</span></span>
+                        </div>
+                        <!-- Info Disk -->
+                        <div class="font-mono text-xs text-muted flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-good"></span>
+                            <span>DSK: <span x-text="stats.memory.used">0</span> / <span x-text="stats.memory.total">0</span></span>
                         </div>
                     </div>
                 </div>
-                <div class="relative w-20 h-20 shrink-0">
-                    <svg class="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
-                        <circle cx="40" cy="40" r="34" fill="none" stroke="#1c2536" stroke-width="7"/>
-                        <circle cx="40" cy="40" r="34" fill="none" stroke="#5eead4" stroke-width="7"
-                                stroke-linecap="round"
-                                stroke-dasharray="213.6"
-                                :stroke-dashoffset="213.6 - (213.6 * (parseFloat(stats.memory.percent) || 0) / 100)"
-                                class="transition-all duration-1000 ease-out"/>
-                    </svg>
-                    <div class="absolute inset-0 flex items-center justify-center">
-                         <span class="font-display font-semibold text-sm text-white" x-text="Math.floor(stats.memory.percent) + '%'">0%</span>
+
+                <!-- Bagian Kanan (2 Gauge) -->
+                <div class="flex items-center gap-4 sm:gap-6">
+                    
+                    <!-- Gauge 1: RAM (Cyan) -->
+                    <div class="relative w-20 h-20 shrink-0">
+                        <svg class="w-full h-full -rotate-90" viewBox="0 0 80 80">
+                            <circle cx="40" cy="40" r="34" fill="none" stroke="#1c2536" stroke-width="7"/>
+                            <circle cx="40" cy="40" r="34" fill="none" stroke="#5eead4" stroke-width="7"
+                                    stroke-linecap="round" stroke-dasharray="213.6"
+                                    :stroke-dashoffset="213.6 - (213.6 * (parseFloat(stats.memory.percent) || 0) / 100)"
+                                    class="transition-all duration-1000 ease-out"/>
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span class="font-display font-semibold text-sm text-white" x-text="Math.floor(stats.memory.percent) + '%'">0%</span>
+                        </div>
                     </div>
+
+                    <!-- Gauge 2: Disk (Hijau) -->
+                    <div class="relative w-20 h-20 shrink-0">
+                        <svg class="w-full h-full -rotate-90" viewBox="0 0 80 80">
+                            <circle cx="40" cy="40" r="34" fill="none" stroke="#1c2536" stroke-width="7"/>
+                            <circle cx="40" cy="40" r="34" fill="none" stroke="#34d399" stroke-width="7"
+                                    stroke-linecap="round" stroke-dasharray="213.6"
+                                    :stroke-dashoffset="213.6 - (213.6 * (parseFloat(stats.memory.percent) || 0) / 100)"
+                                    class="transition-all duration-1000 ease-out"/>
+                        </svg>
+                        <div class="absolute inset-0 flex items-center justify-center">
+                            <span class="font-display font-semibold text-sm text-white" x-text="Math.floor(stats.memory.percent) + '%'">0%</span>
+                        </div>
+                    </div>
+
                 </div>
             </div>
 
@@ -203,7 +233,6 @@
                     </div>
                 </div>
             </div>
-            
 
         </div>
 
