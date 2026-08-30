@@ -49,7 +49,7 @@ function startDashboard(port = 3000) {
       }
 
       const stats = {
-        // hostname: os.hostname(),
+        hostname: os.hostname(),
         uptime: os.uptime(), 
         botStatus: 'Online', 
         memory: {
@@ -68,7 +68,6 @@ function startDashboard(port = 3000) {
           totalFiles
         }
       };
-
       res.json({ success: true, data: stats });
     } catch (e) {
       res.status(500).json({ success: false, message: e.message });
@@ -76,7 +75,7 @@ function startDashboard(port = 3000) {
   });
 
   app.listen(port, '0.0.0.0', () => {
-    console.log(`[INFO] Web Monitoring berjalan di http://0.0.0.0:${port}`);
+    console.log(`[INFO] Web Monitoring berjalan di http://127.0.0.1:${port}`);
   });
 }
 
