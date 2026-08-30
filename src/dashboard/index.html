@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="id">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,7 +15,9 @@
     <!-- Fonts: Space Grotesk (display) / Inter (body) / JetBrains Mono (data) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
 
     <script>
         tailwind.config = {
@@ -85,22 +88,28 @@
         }
     </style>
 </head>
+
 <body class="text-ink font-body antialiased min-h-screen flex flex-col">
 
-    <div x-data="dashboard()" x-init="startPolling()" class="w-full max-w-6xl mx-auto px-5 py-8 md:px-10 md:py-14 flex flex-col flex-grow">
+    <div x-data="dashboard()" x-init="startPolling()"
+        class="w-full max-w-6xl mx-auto px-5 py-8 md:px-10 md:py-14 flex flex-col flex-grow">
 
         <!-- ===== Header ===== -->
         <header class="flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between mb-10 shrink-0">
             <div class="flex items-center gap-4">
-                <div class="relative w-12 h-12 shrink-0 rounded-xl bg-panel2 border border-line flex items-center justify-center glow-border">
-                    <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M5 12a7 7 0 1114 0 7 7 0 01-14 0z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M12 9v3l2 1.5"/>
-                    </svg>
+                <div
+                    class="relative w-12 h-12 shrink-0 rounded-xl bg-panel2 border border-line flex items-center justify-center glow-border">
+                    <div
+                        class="relative w-12 h-12 shrink-0 rounded-xl bg-panel2 border border-line flex items-center justify-center glow-border overflow-hidden">
+                        <!-- Ganti src dengan link URL gambar atau path file gambar kamu -->
+                        <img src="/assets/nadeshiko.webp" alt="Custom Icon" class="w-full h-full object-cover" />
+                    </div>
+
                 </div>
                 <div>
-                    <h1 class="font-display font-semibold text-2xl md:text-[26px] text-white tracking-tight leading-none">
-                        Nadex Cloud Bot
+                    <h1
+                        class="font-display font-semibold text-2xl md:text-[26px] text-white tracking-tight leading-none">
+                        NADEX CLOUD STORAGE
                     </h1>
                     <p class="text-muted text-sm mt-1.5 font-mono tracking-wide">SERVER &amp; DATABASE MONITORING</p>
                 </div>
@@ -108,16 +117,15 @@
 
             <!-- Status Badge -->
             <div class="flex items-center gap-3 self-start sm:self-auto rounded-full bg-panel border pl-3 pr-4 py-2"
-                 :class="isOnline ? 'border-good/30' : 'border-bad/30'">
+                :class="isOnline ? 'border-good/30' : 'border-bad/30'">
                 <span class="relative flex w-2.5 h-2.5">
                     <span class="absolute inline-flex h-full w-full rounded-full opacity-60"
-                          :class="isOnline ? 'bg-good animate-ping' : 'bg-bad animate-ping'"></span>
+                        :class="isOnline ? 'bg-good animate-ping' : 'bg-bad animate-ping'"></span>
                     <span class="relative inline-flex rounded-full w-2.5 h-2.5"
-                          :class="isOnline ? 'bg-good' : 'bg-bad'"></span>
+                        :class="isOnline ? 'bg-good' : 'bg-bad'"></span>
                 </span>
-                <span class="font-mono text-xs uppercase tracking-wider"
-                      :class="isOnline ? 'text-good' : 'text-bad'"
-                      x-text="isOnline ? 'Online' : 'Offline'"></span>
+                <span class="font-mono text-xs uppercase tracking-wider" :class="isOnline ? 'text-good' : 'text-bad'"
+                    x-text="isOnline ? 'Online' : 'Offline'"></span>
             </div>
         </header>
 
@@ -128,53 +136,57 @@
 
                 <!-- Card 2: System Resources (2 Gauges) -->
                 <div class="card sm:col-span-2 flex items-center justify-between">
-                    
+
                     <!-- Bagian Kiri (Teks) -->
                     <div class="flex flex-col justify-between h-full">
-                        <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Resources</span>
-                        
+                        <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Resources Usage</span>
+
                         <div class="mt-2 space-y-2">
                             <!-- Info RAM -->
                             <div class="font-mono text-xs text-muted flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full bg-accent"></span>
-                                <span>RAM: <span x-text="stats.memory.used">0</span> / <span x-text="stats.memory.total">0</span></span>
+                                <span>RAM: <span x-text="stats.memory.used">0</span> / <span
+                                        x-text="stats.memory.total">0</span></span>
                             </div>
                             <!-- Info Disk -->
                             <div class="font-mono text-xs text-muted flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full bg-good"></span>
-                                <span>DSK: <span x-text="stats.disk.used">0</span> / <span x-text="stats.disk.total">0</span></span>
+                                <span>DSK: <span x-text="stats.disk.used">0</span> / <span
+                                        x-text="stats.disk.total">0</span></span>
                             </div>
                         </div>
                     </div>
 
                     <!-- Bagian Kanan (2 Gauge) -->
                     <div class="flex items-center gap-4 sm:gap-6">
-                        
+
                         <!-- Gauge 1: RAM (Cyan) -->
                         <div class="relative w-20 h-20 shrink-0">
                             <svg class="w-full h-full -rotate-90" viewBox="0 0 80 80">
-                                <circle cx="40" cy="40" r="34" fill="none" stroke="#1c2536" stroke-width="7"/>
+                                <circle cx="40" cy="40" r="34" fill="none" stroke="#1c2536" stroke-width="7" />
                                 <circle cx="40" cy="40" r="34" fill="none" stroke="#5eead4" stroke-width="7"
-                                        stroke-linecap="round" stroke-dasharray="213.6"
-                                        :stroke-dashoffset="213.6 - (213.6 * (parseFloat(stats.memory.percent) || 0) / 100)"
-                                        class="transition-all duration-1000 ease-out"/>
+                                    stroke-linecap="round" stroke-dasharray="213.6"
+                                    :stroke-dashoffset="213.6 - (213.6 * (parseFloat(stats.memory.percent) || 0) / 100)"
+                                    class="transition-all duration-1000 ease-out" />
                             </svg>
                             <div class="absolute inset-0 flex items-center justify-center">
-                                <span class="font-display font-semibold text-sm text-white" x-text="Math.floor(stats.memory.percent) + '%'">0%</span>
+                                <span class="font-display font-semibold text-sm text-white"
+                                    x-text="Math.floor(stats.memory.percent) + '%'">0%</span>
                             </div>
                         </div>
 
                         <!-- Gauge 2: Disk (Hijau) -->
                         <div class="relative w-20 h-20 shrink-0">
                             <svg class="w-full h-full -rotate-90" viewBox="0 0 80 80">
-                                <circle cx="40" cy="40" r="34" fill="none" stroke="#1c2536" stroke-width="7"/>
+                                <circle cx="40" cy="40" r="34" fill="none" stroke="#1c2536" stroke-width="7" />
                                 <circle cx="40" cy="40" r="34" fill="none" stroke="#34d399" stroke-width="7"
-                                        stroke-linecap="round" stroke-dasharray="213.6"
-                                        :stroke-dashoffset="213.6 - (213.6 * (parseFloat(stats.disk.percent) || 0) / 100)"
-                                        class="transition-all duration-1000 ease-out"/>
+                                    stroke-linecap="round" stroke-dasharray="213.6"
+                                    :stroke-dashoffset="213.6 - (213.6 * (parseFloat(stats.disk.percent) || 0) / 100)"
+                                    class="transition-all duration-1000 ease-out" />
                             </svg>
                             <div class="absolute inset-0 flex items-center justify-center">
-                                <span class="font-display font-semibold text-sm text-white" x-text="Math.floor(stats.disk.percent) + '%'">0%</span>
+                                <span class="font-display font-semibold text-sm text-white"
+                                    x-text="Math.floor(stats.disk.percent) + '%'">0%</span>
                             </div>
                         </div>
 
@@ -187,12 +199,14 @@
                         <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Master Games</span>
                         <div class="w-8 h-8 rounded-lg bg-good/10 flex items-center justify-center">
                             <svg class="w-4 h-4 text-good" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M9 3v18M4 8h16M4 16h16"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                    d="M9 3v18M4 8h16M4 16h16" />
                             </svg>
                         </div>
                     </div>
                     <div>
-                        <div class="font-display font-semibold text-3xl text-white num-flicker" x-text="stats.database.totalGames">0</div>
+                        <div class="font-display font-semibold text-3xl text-white num-flicker"
+                            x-text="stats.database.totalGames">0</div>
                         <p class="text-muted text-xs mt-2">Katalog game terdaftar</p>
                     </div>
                 </div>
@@ -203,18 +217,22 @@
                         <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Storage Stats</span>
                         <div class="w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
                             <svg class="w-4 h-4 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M4 7a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/>
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 11h8M8 15h5"/>
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                    d="M4 7a2 2 0 012-2h12a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" />
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"
+                                    d="M8 11h8M8 15h5" />
                             </svg>
                         </div>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
                         <div>
-                            <div class="font-display font-semibold text-2xl text-white" x-text="stats.database.totalAccounts">0</div>
+                            <div class="font-display font-semibold text-2xl text-white"
+                                x-text="stats.database.totalAccounts">0</div>
                             <p class="text-muted text-[11px] mt-1">Akun Terenkripsi</p>
                         </div>
                         <div class="border-l border-line pl-3">
-                            <div class="font-display font-semibold text-2xl text-white" x-text="stats.database.totalFiles">0</div>
+                            <div class="font-display font-semibold text-2xl text-white"
+                                x-text="stats.database.totalFiles">0</div>
                             <p class="text-muted text-[11px] mt-1">File Terunggah</p>
                         </div>
                     </div>
@@ -224,8 +242,9 @@
         </main>
 
         <!-- ===== Footer ===== -->
-        <footer class="mt-10 pt-6 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shrink-0">
-            <p class="text-muted font-mono">NADEX CLOUD BOT — REALTIME MONITOR</p>
+        <footer
+            class="mt-10 pt-6 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shrink-0">
+            <p class="text-muted font-mono">NADEX CLOUD STORAGE</p>
             <p class="text-muted font-mono">
                 Server Uptime:
                 <span class="text-ink" x-text="formatUptimeDigital(displayUptime)">Belum sinkron</span>
@@ -256,7 +275,7 @@
                         if (result.success) {
                             this.stats = result.data;
                             this.isOnline = true;
-                            
+
                             // Hitung kapan server mulai hidup (hanya set sekali atau jika sinkronisasi perlu)
                             if (!this.serverStartTime || this.displayUptime === 0) {
                                 this.serverStartTime = Date.now() - (this.stats.uptime * 1000);
@@ -275,7 +294,7 @@
 
                 startPolling() {
                     this.fetchData();
-                    
+
                     // Polling data server per 5 detik
                     setInterval(() => {
                         this.fetchData();
@@ -291,8 +310,8 @@
 
                 formatUptime(seconds) {
                     if (!seconds) return '0s';
-                    const d = Math.floor(seconds / (3600*24));
-                    const h = Math.floor(seconds % (3600*24) / 3600);
+                    const d = Math.floor(seconds / (3600 * 24));
+                    const h = Math.floor(seconds % (3600 * 24) / 3600);
                     const m = Math.floor(seconds % 3600 / 60);
                     const s = Math.floor(seconds % 60);
 
@@ -309,7 +328,7 @@
                     const h = Math.floor(seconds / 3600);
                     const m = Math.floor((seconds % 3600) / 60);
                     const s = Math.floor(seconds % 60);
-                    
+
                     return [h, m, s]
                         .map(v => v.toString().padStart(2, '0'))
                         .join(':');
@@ -318,4 +337,5 @@
         })
     </script>
 </body>
+
 </html>

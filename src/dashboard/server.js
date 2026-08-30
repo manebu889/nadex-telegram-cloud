@@ -6,6 +6,8 @@ const config = require('../config');
 
 function startDashboard(port = 3000) {
   const app = express();
+
+  app.use('/assets', express.static(path.join(__dirname, 'assets')));
   
   // Serve the HTML file
   app.get('/', (req, res) => {
