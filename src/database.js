@@ -16,21 +16,21 @@ mongoose.connect(mongoURI).then(() => {
 // ============================================
 const FileModel = mongoose.model('files', new mongoose.Schema({
     createdAt: { type: Number, default: Date.now }
-}, { strict: false }));
+}, { strict: false, collection: 'files' }));
 
 const AccountModel = mongoose.model('account', new mongoose.Schema({
     createdAt: { type: Number, default: Date.now }
-}, { strict: false }));
+}, { strict: false, collection: 'accounts' }));
 
-const GameModel = mongoose.model('master_games', new mongoose.Schema({
+const GameModel = mongoose.model('master_accounts', new mongoose.Schema({
     createdAt: { type: Number, default: Date.now }
-}, { strict: false }));
+}, { strict: false, collection: 'master_accounts' }));
 
 // Fungsi pemetaan nama collection ke Model Mongoose
 function getModel(collectionName) {
     if (collectionName === 'files') return FileModel;
     if (collectionName === 'account') return AccountModel;
-    if (collectionName === 'master_games') return GameModel;
+    if (collectionName === 'master_accounts') return GameModel;
     
     // Fallback model dinamis jika ada collection baru
     return mongoose.model(collectionName, new mongoose.Schema({
@@ -125,8 +125,8 @@ async function saveAccount(accountData) {
   return await addDocument('account', accountData);
 }
 
-async function getMasterGames() {
-  return await getDocuments('master_games');
+async function getMasterAccounts() {
+  return await getDocuments('master_accounts');
 }
 
 async function getAccounts() {
@@ -166,7 +166,7 @@ async function deleteAccount(accId) {
 module.exports = { 
   readDB, saveDB, deleteLabel, 
   addDocument, saveAccount, 
-  getDocuments, getMasterGames, getAccounts,
+  getDocuments, getMasterAccounts, getAccounts,
   updateDocument, updateAccount,
   deleteDocument, deleteAccount
 };

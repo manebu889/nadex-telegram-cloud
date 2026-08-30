@@ -17,7 +17,7 @@ require('./src/middlewares')(bot);
 require('./src/features/search')(bot);
 require('./src/features/history')(bot);
 require('./src/features/delete')(bot);
-require('./src/features/gameAccounts')(bot);
+require('./src/features/masterAccounts')(bot);
 require('./src/features/upload')(bot);
 
 const startDashboard = require('./src/dashboard/server');

@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const os = require('os');
-const { getMasterGames, getAccounts, getDocuments } = require('../database');
+const { getMasterAccounts, getAccounts, getDocuments } = require('../database');
 const config = require('../config');
 
 function startDashboard(port = 3000) {
@@ -19,7 +19,7 @@ function startDashboard(port = 3000) {
   // API endpoint for dashboard to fetch stats
   app.get('/api/stats', async (req, res) => {
     try {
-      const gamesRes = await getMasterGames();
+      const gamesRes = await getMasterAccounts();
       const accRes = await getAccounts();
       const filesRes = await getDocuments('files');
 

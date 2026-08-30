@@ -1,39 +1,39 @@
 const { Markup } = require('telegraf');
 const config = require('../config');
-const { getMasterGames, getAccounts, addDocument, updateAccount, saveAccount } = require('../database');
+const { getMasterAccounts, getAccounts, addDocument, updateAccount, saveAccount } = require('../database');
 const { decryptPassword, encryptPassword, formatDate } = require('../utils');
 
 module.exports = (bot) => {
-  bot.command('addgame', async (ctx) => {
+  bot.command('addmaster', async (ctx) => {
     const args = ctx.message.text.split(' ').slice(1);
-    if (args.length === 0) return ctx.reply("Gunakan format: /addgame [Nama Game]");
-    const gameName = args.join(' ');
-    const res = await addDocument('master_games', { name: gameName });
+    if (args.length === 0) return ctx.reply("Gunakan format: /addmaster [Nama Platform/Layanan]");
+    const masterName = args.join(' ');
+    const res = await addDocument('master_accounts', { name: masterName });
     if (res.success) {
-      ctx.reply(`✅ Game '${gameName}' berhasil ditambahkan ke Master Data.`);
+      ctx.reply(`✅ Platform '${masterName}' berhasil ditambahkan ke Master Data.`);
     } else {
       ctx.reply(`❌ Gagal: ${res.message}`);
     }
   });
 
-  bot.command('listgame', async (ctx) => {
-    const gamesRes = await getMasterGames();
+  bot.command('listmaster', async (ctx) => {
+    const masterRes = await getMasterAccounts();
     const accRes = await getAccounts();
     
-    if (!gamesRes.success || gamesRes.data.length === 0) {
-      return ctx.reply('❌ Belum ada game terdaftar di Master Data.');
+    if (!masterRes.success || masterRes.data.length === 0) {
+      return ctx.reply('❌ Belum ada platform terdaftar di Master Data.');
     }
 
     const accounts = accRes.success ? accRes.data : [];
-    let messageText = '🎮 **Daftar Master Data Game**\n\n';
+    let messageText = '🏢 **Daftar Master Data Platform**\n\n';
 
-    gamesRes.data.forEach((game, index) => {
-      const gameAccounts = accounts.filter(acc => acc.gameId === game.id);
-      const totalAccounts = gameAccounts.length;
+    masterRes.data.forEach((game, index) => {
+      const masterAccounts = accounts.filter(acc => acc.masterId === game.id);
+      const totalAccounts = masterAccounts.length;
       
       let lastAdded = '-';
       if (totalAccounts > 0) {
-        const latestAcc = gameAccounts.reduce((prev, current) => 
+        const latestAcc = masterAccounts.reduce((prev, current) => 
           (prev.createdAt > current.createdAt) ? prev : current
         );
         lastAdded = formatDate(latestAcc.createdAt);
@@ -48,67 +48,67 @@ module.exports = (bot) => {
   });
 
   bot.command('save', async (ctx) => {
-    const gamesRes = await getMasterGames();
-    if (!gamesRes.success || gamesRes.data.length === 0) {
-      return ctx.reply('Daftar game masih kosong! Tambahkan terlebih dahulu dengan perintah: /addgame Nama Game');
+    const masterRes = await getMasterAccounts();
+    if (!masterRes.success || masterRes.data.length === 0) {
+      return ctx.reply('Daftar platform masih kosong! Tambahkan terlebih dahulu dengan perintah: /addmaster Nama Platform');
     }
 
-    const buttons = gamesRes.data.map(game => 
+    const buttons = masterRes.data.map(game => 
       [Markup.button.callback(game.name, `SEL_GAME_${game.id}`)]
     );
     
-    await ctx.reply('Pilih game yang akan disimpan informasinya:', {
+    await ctx.reply('Pilih platform yang akan disimpan informasinya:', {
       message_thread_id: ctx.message.message_thread_id,
       ...Markup.inlineKeyboard(buttons)
     });
   });
 
   bot.action(/^SEL_GAME_(.+)$/, async (ctx) => {
-    const gameId = ctx.match[1];
+    const masterId = ctx.match[1];
     
     ctx.session ??= {}; 
     ctx.session.isAddingAccount = true;
     ctx.session.isEditingSpec = false;
     ctx.session.passEditStep = null;
     ctx.session.saveStep = 'WAITING_DESC';
-    ctx.session.selectedGame = gameId;
+    ctx.session.selectedGame = masterId;
 
     await ctx.answerCbQuery();
     await ctx.deleteMessage().catch(()=>{});
-    await ctx.reply(`Game telah dipilih.\n\nSilakan masukkan Spesifikasi/Deskripsi akun ini:\nContoh: _Akun Smurf Tier Mythic_`, { parse_mode: 'Markdown' });
+    await ctx.reply(`Platform telah dipilih.\n\nSilakan masukkan Spesifikasi/Deskripsi akun ini:\nContoh: _Akun Premium 1 Bulan_`, { parse_mode: 'Markdown' });
   });
 
   bot.command('check', async (ctx) => {
-    const gamesRes = await getMasterGames();
+    const masterRes = await getMasterAccounts();
     
-    if (!gamesRes.success || gamesRes.data.length === 0) {
-      return ctx.reply('Belum ada master game yang tersedia.');
+    if (!masterRes.success || masterRes.data.length === 0) {
+      return ctx.reply('Belum ada master platform yang tersedia.');
     }
 
-    const buttons = gamesRes.data.map(game => 
-      [Markup.button.callback(`🎮 ${game.name}`, `CHK_GAME_${game.id}`)]
+    const buttons = masterRes.data.map(game => 
+      [Markup.button.callback(`🏢 ${game.name}`, `CHK_GAME_${game.id}`)]
     );
 
-    await ctx.reply('Pilih game untuk melihat daftar akunnya:', {
+    await ctx.reply('Pilih platform untuk melihat daftar akunnya:', {
       message_thread_id: ctx.message.message_thread_id,
       ...Markup.inlineKeyboard(buttons)
     });
   });
 
   bot.action(/^CHK_GAME_(.+)$/, async (ctx) => {
-    const gameId = ctx.match[1];
+    const masterId = ctx.match[1];
     const accRes = await getAccounts();
     
     if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
     
-    const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
+    const masterAccounts = accRes.data.filter(a => a.masterId === masterId);
     
-    if (gameAccounts.length === 0) {
-      await ctx.answerCbQuery("Tidak ada akun untuk game ini.", { show_alert: true });
+    if (masterAccounts.length === 0) {
+      await ctx.answerCbQuery("Tidak ada akun untuk platform ini.", { show_alert: true });
       return;
     }
     
-    const buttons = gameAccounts.map(acc => {
+    const buttons = masterAccounts.map(acc => {
       const label = `${acc.username}`;
       return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHK_ACC_${acc.id}`)];
     });
@@ -121,17 +121,17 @@ module.exports = (bot) => {
   });
 
   bot.action('CHK_BACK', async (ctx) => {
-    const gamesRes = await getMasterGames();
-    if (!gamesRes.success || gamesRes.data.length === 0) {
-      return ctx.answerCbQuery("Belum ada master game.");
+    const masterRes = await getMasterAccounts();
+    if (!masterRes.success || masterRes.data.length === 0) {
+      return ctx.answerCbQuery("Belum ada master platform.");
     }
 
-    const buttons = gamesRes.data.map(game => 
-      [Markup.button.callback(`🎮 ${game.name}`, `CHK_GAME_${game.id}`)]
+    const buttons = masterRes.data.map(game => 
+      [Markup.button.callback(`🏢 ${game.name}`, `CHK_GAME_${game.id}`)]
     );
 
     await ctx.answerCbQuery();
-    await ctx.editMessageText('Pilih game untuk melihat daftar akunnya:', {
+    await ctx.editMessageText('Pilih platform untuk melihat daftar akunnya:', {
       ...Markup.inlineKeyboard(buttons)
     }).catch(()=>{});
   });
@@ -180,56 +180,56 @@ module.exports = (bot) => {
 
   bot.action('CMD_CHANGE_SPEC', async (ctx) => {
     const accRes = await getAccounts();
-    const gamesRes = await getMasterGames();
+    const masterRes = await getMasterAccounts();
     
     if (!accRes.success || accRes.data.length === 0) {
       return ctx.answerCbQuery('Belum ada akun di database.', { show_alert: true });
     }
 
-    const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
-    const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
+    const activeMasterIds = new Set(accRes.data.map(acc => acc.masterId));
+    const activeMasters = masterRes.success ? masterRes.data.filter(g => activeMasterIds.has(g.id)) : [];
 
-    const buttons = activeGames.map(game => 
-      [Markup.button.callback(`🎮 ${game.name}`, `CHG_GAME_${game.id}`)]
+    const buttons = activeMasters.map(game => 
+      [Markup.button.callback(`🏢 ${game.name}`, `CHG_GAME_${game.id}`)]
     );
 
     await ctx.answerCbQuery();
-    await ctx.editMessageText('Pilih game untuk mengedit spesifikasi akun:', {
+    await ctx.editMessageText('Pilih platform untuk mengedit spesifikasi akun:', {
       ...Markup.inlineKeyboard(buttons)
     }).catch(()=>{});
   });
 
   bot.action('CMD_CHANGE_PASS', async (ctx) => {
     const accRes = await getAccounts();
-    const gamesRes = await getMasterGames();
+    const masterRes = await getMasterAccounts();
     
     if (!accRes.success || accRes.data.length === 0) {
       return ctx.answerCbQuery('Belum ada akun di database.', { show_alert: true });
     }
 
-    const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
-    const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
+    const activeMasterIds = new Set(accRes.data.map(acc => acc.masterId));
+    const activeMasters = masterRes.success ? masterRes.data.filter(g => activeMasterIds.has(g.id)) : [];
 
-    const buttons = activeGames.map(game => 
-      [Markup.button.callback(`🎮 ${game.name}`, `CHGPASS_GAME_${game.id}`)]
+    const buttons = activeMasters.map(game => 
+      [Markup.button.callback(`🏢 ${game.name}`, `CHGPASS_GAME_${game.id}`)]
     );
 
     await ctx.answerCbQuery();
-    await ctx.editMessageText('Pilih game untuk mereset password akunnya:', {
+    await ctx.editMessageText('Pilih platform untuk mereset password akunnya:', {
       ...Markup.inlineKeyboard(buttons)
     }).catch(()=>{});
   });
 
   bot.action(/^CHG_GAME_(.+)$/, async (ctx) => {
-    const gameId = ctx.match[1];
+    const masterId = ctx.match[1];
     const accRes = await getAccounts();
     
     if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
     
-    const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
-    if (gameAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+    const masterAccounts = accRes.data.filter(a => a.masterId === masterId);
+    if (masterAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk platform ini.");
     
-    const buttons = gameAccounts.map(acc => {
+    const buttons = masterAccounts.map(acc => {
       const label = `${acc.username}`;
       return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHG_ACC_${acc.id}`)];
     });
@@ -241,15 +241,15 @@ module.exports = (bot) => {
   });
 
   bot.action(/^CHGPASS_GAME_(.+)$/, async (ctx) => {
-    const gameId = ctx.match[1];
+    const masterId = ctx.match[1];
     const accRes = await getAccounts();
     
     if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
     
-    const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
-    if (gameAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+    const masterAccounts = accRes.data.filter(a => a.masterId === masterId);
+    if (masterAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk platform ini.");
     
-    const buttons = gameAccounts.map(acc => {
+    const buttons = masterAccounts.map(acc => {
       const label = `${acc.username}`;
       return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `CHGPASS_ACC_${acc.id}`)];
     });
@@ -308,11 +308,11 @@ module.exports = (bot) => {
         const accRes = await getAccounts();
         const acc = accRes.success ? accRes.data.find(a => a.id === accId) : null;
         if (acc) {
-          const gamesRes = await getMasterGames();
-          const game = gamesRes.success ? gamesRes.data.find(g => g.id === acc.gameId) : null;
-          const gameName = game ? game.name : "Unknown";
+          const masterRes = await getMasterAccounts();
+          const game = masterRes.success ? masterRes.data.find(g => g.id === acc.masterId) : null;
+          const masterName = game ? game.name : "Unknown";
           
-          await ctx.telegram.sendMessage(config.CHAT_ID, `🔄 **Spesifikasi Akun Diperbarui**\n\nGame: ${gameName}\n📝 Spesifikasi Baru: ${newDesc || '-'}\nUser: \`${acc.username}\``, {
+          await ctx.telegram.sendMessage(config.CHAT_ID, `🔄 **Spesifikasi Akun Diperbarui**\n\nPlatform: ${masterName}\n📝 Spesifikasi Baru: ${newDesc || '-'}\nUser: \`${acc.username}\``, {
             parse_mode: 'Markdown',
             message_thread_id: targetTopic
           }).catch(err => console.error("Gagal forward update spesifikasi:", err.message));
@@ -365,11 +365,11 @@ module.exports = (bot) => {
           const accRes = await getAccounts();
           const acc = accRes.success ? accRes.data.find(a => a.id === accId) : null;
           if (acc) {
-            const gamesRes = await getMasterGames();
-            const game = gamesRes.success ? gamesRes.data.find(g => g.id === acc.gameId) : null;
-            const gameName = game ? game.name : "Unknown";
+            const masterRes = await getMasterAccounts();
+            const game = masterRes.success ? masterRes.data.find(g => g.id === acc.masterId) : null;
+            const masterName = game ? game.name : "Unknown";
             
-            await ctx.telegram.sendMessage(config.CHAT_ID, `🔄 **Password Akun Diperbarui**\n\nGame: ${gameName}\n📝 Spesifikasi: ${acc.description || '-'}\nUser: \`${acc.username}\`\nStatus: Password Baru Terenkripsi 🔐`, {
+            await ctx.telegram.sendMessage(config.CHAT_ID, `🔄 **Password Akun Diperbarui**\n\nPlatform: ${masterName}\n📝 Spesifikasi: ${acc.description || '-'}\nUser: \`${acc.username}\`\nStatus: Password Baru Terenkripsi 🔐`, {
               parse_mode: 'Markdown',
               message_thread_id: targetTopic
             }).catch(err => console.error("Gagal forward update password:", err.message));
@@ -405,7 +405,7 @@ module.exports = (bot) => {
         const desc = ctx.session.tempDesc;
         
         await saveAccount({ 
-          gameId: ctx.session.selectedGame,
+          masterId: ctx.session.selectedGame,
           description: desc,
           username: user, 
           password: encryptedPass 
@@ -422,11 +422,11 @@ module.exports = (bot) => {
         
         const targetTopic = config.TOPICS.TOPIC_ACCOUNTS;
         if (targetTopic && newestAcc) {
-          const gamesRes = await getMasterGames();
-          const game = gamesRes.success ? gamesRes.data.find(g => g.id === newestAcc.gameId) : null;
-          const gameName = game ? game.name : "Unknown";
+          const masterRes = await getMasterAccounts();
+          const game = masterRes.success ? masterRes.data.find(g => g.id === newestAcc.masterId) : null;
+          const masterName = game ? game.name : "Unknown";
           
-          await ctx.telegram.sendMessage(config.CHAT_ID, `🆕 **Akun Baru Ditambahkan**\n\nGame: ${gameName}\n📝 Spesifikasi: ${newestAcc.description || '-'}\nUser: \`${newestAcc.username}\`\nStatus: Aman & Terenkripsi 🔐`, {
+          await ctx.telegram.sendMessage(config.CHAT_ID, `🆕 **Akun Baru Ditambahkan**\n\nPlatform: ${masterName}\n📝 Spesifikasi: ${newestAcc.description || '-'}\nUser: \`${newestAcc.username}\`\nStatus: Aman & Terenkripsi 🔐`, {
             parse_mode: 'Markdown',
             message_thread_id: targetTopic
           }).catch(err => console.error("Gagal forward info akun:", err.message));

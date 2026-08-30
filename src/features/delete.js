@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { Markup } = require('telegraf');
 const config = require('../config');
-const { readDB, deleteLabel, getAccounts, getMasterGames, deleteAccount } = require('../database');
+const { readDB, deleteLabel, getAccounts, getMasterAccounts, deleteAccount } = require('../database');
 
 module.exports = (bot) => {
   // Command: /del
@@ -38,7 +38,7 @@ module.exports = (bot) => {
     // Kondisi 1: Hanya /del (menampilkan menu pilihan)
     const buttons = [
       [Markup.button.callback('🖼 Hapus Label Foto', 'DEL_MENU_LABEL')],
-      [Markup.button.callback('🎮 Hapus Akun Game', 'DEL_MENU_ACCOUNT')]
+      [Markup.button.callback('🎮 Hapus Akun Platform', 'DEL_MENU_ACCOUNT')]
     ];
 
     await ctx.reply("Menu Penghapusan Data:", {
@@ -71,36 +71,36 @@ module.exports = (bot) => {
 
   bot.action('DEL_MENU_ACCOUNT', async (ctx) => {
     const accRes = await getAccounts();
-    const gamesRes = await getMasterGames();
+    const masterRes = await getMasterAccounts();
     
     if (!accRes.success || accRes.data.length === 0) {
       return ctx.answerCbQuery('Belum ada akun di database.', { show_alert: true });
     }
 
-    const activeGameIds = new Set(accRes.data.map(acc => acc.gameId));
-    const activeGames = gamesRes.success ? gamesRes.data.filter(g => activeGameIds.has(g.id)) : [];
+    const activeMasterIds = new Set(accRes.data.map(acc => acc.masterId));
+    const activeMasters = masterRes.success ? masterRes.data.filter(g => activeMasterIds.has(g.id)) : [];
 
-    const buttons = activeGames.map(game => 
+    const buttons = activeMasters.map(game => 
       [Markup.button.callback(`🎮 ${game.name}`, `DEL_GAME_${game.id}`)]
     );
     buttons.push([Markup.button.callback('❌ Batal', 'cancel_delete')]);
 
     await ctx.answerCbQuery();
-    await ctx.editMessageText('Pilih game dari akun yang ingin dihapus:', {
+    await ctx.editMessageText('Pilih platform dari akun yang ingin dihapus:', {
       ...Markup.inlineKeyboard(buttons)
     }).catch(()=>{});
   });
 
   bot.action(/^DEL_GAME_(.+)$/, async (ctx) => {
-    const gameId = ctx.match[1];
+    const masterId = ctx.match[1];
     const accRes = await getAccounts();
     
     if (!accRes.success) return ctx.answerCbQuery("Gagal memuat akun.");
     
-    const gameAccounts = accRes.data.filter(a => a.gameId === gameId);
-    if (gameAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk game ini.");
+    const masterAccounts = accRes.data.filter(a => a.masterId === masterId);
+    if (masterAccounts.length === 0) return ctx.answerCbQuery("Tidak ada akun untuk platform ini.");
     
-    const buttons = gameAccounts.map(acc => {
+    const buttons = masterAccounts.map(acc => {
       const label = `${acc.username}`;
       return [Markup.button.callback(`👤 ${label.substring(0, 40)}`, `DEL_ACC_${acc.id}`)];
     });
@@ -129,11 +129,11 @@ module.exports = (bot) => {
       // Notif ke topic
       const targetTopic = config.TOPICS.TOPIC_ACCOUNTS;
       if (targetTopic) {
-          const gamesRes = await getMasterGames();
-          const game = gamesRes.success ? gamesRes.data.find(g => g.id === acc.gameId) : null;
-          const gameName = game ? game.name : "Unknown";
+          const masterRes = await getMasterAccounts();
+          const game = masterRes.success ? masterRes.data.find(g => g.id === acc.masterId) : null;
+          const masterName = game ? game.name : "Unknown";
           
-          await ctx.telegram.sendMessage(config.CHAT_ID, `🗑 **Akun Dihapus**\n\nGame: ${gameName}\nUser: \`${acc.username}\`\nStatus: Terhapus Permanen 🚫`, {
+          await ctx.telegram.sendMessage(config.CHAT_ID, `🗑 **Akun Dihapus**\n\nGame: ${masterName}\nUser: \`${acc.username}\`\nStatus: Terhapus Permanen 🚫`, {
             parse_mode: 'Markdown',
             message_thread_id: targetTopic
           }).catch(err => console.error("Gagal forward info hapus:", err.message));
