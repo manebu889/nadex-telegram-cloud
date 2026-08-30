@@ -25,9 +25,9 @@ const config = {
   }
 };
 
-if (!config.BOT_TOKEN || !config.CHAT_ID || !config.TOPICS.TOPIC_GENERAL) {
-  console.error('[ERROR CRITICAL] BOT_TOKEN, CHAT_ID, atau TOPIC_GENERAL belum disetting di .env!');
-  process.exit(1); // Hentikan sistem jika tidak ada token
+if (!config.BOT_TOKEN || !config.CHAT_ID || !config.TOPICS.TOPIC_GENERAL || !config.MONGODB_URI) {
+  console.error('[ERROR CRITICAL] BOT_TOKEN, CHAT_ID, TOPIC_GENERAL, atau MONGODB_URI belum disetting di .env!');
+  process.exit(1); // Hentikan sistem jika config penting tidak ada
 }
 
 module.exports = config;

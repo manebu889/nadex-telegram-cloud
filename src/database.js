@@ -1,8 +1,8 @@
 const mongoose = require('mongoose');
 const config = require('./config');
 
-// Ambil URI dari config, jika kosong gunakan default docker-compose
-const mongoURI = config.MONGODB_URI || 'mongodb://mongodb:27017/nadex';
+// Ambil URI secara ketat dari config (.env) sesuai aturan
+const mongoURI = config.MONGODB_URI;
 
 mongoose.connect(mongoURI).then(() => {
     console.log("[INFO] Database MongoDB berhasil terhubung!");
