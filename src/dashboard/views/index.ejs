@@ -135,7 +135,7 @@
                         <thead>
                             <tr class="text-muted font-mono text-[11px] uppercase tracking-widest border-b border-line text-center">
                                 <th class="pb-3 px-3 font-medium w-10" x-text="stats.uiStrings?.TABLE_NO || 'NO'"></th>
-                                <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_FILE || 'Nama File'"></th>
+                                <th class="pb-3 px-4 font-medium text-left" x-text="stats.uiStrings?.TABLE_FILE || 'Nama File'"></th>
                                 <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_CATEGORY || 'Kategori'"></th>
                                 <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_LABEL || 'Label'"></th>
                                 <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_TIME || 'Waktu'"></th>
@@ -150,10 +150,10 @@
                             <template x-for="(file, index) in stats.recentActivity" :key="index">
                                 <tr class="border-b border-line/50 hover:bg-white/[0.02] transition-colors group">
                                     <td class="py-3 px-3 text-center text-muted font-mono" x-text="index + 1"></td>
-                                    <td class="py-3 px-4 text-ink truncate max-w-[200px]" :title="file.name">
-                                        <div class="flex items-center justify-center gap-2">
-                                            <span x-show="index === 0" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-accent/20 text-accent uppercase tracking-wider" x-text="stats.uiStrings?.BADGE_NEW || 'Baru'"></span>
-                                            <span x-text="file.name" class="font-medium text-center"></span>
+                                    <td class="py-3 px-4 text-ink truncate max-w-[200px] text-left" :title="file.name">
+                                        <div class="flex items-center justify-start gap-2">
+                                            <span x-show="index === 0" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-accent/20 text-accent uppercase tracking-wider shrink-0" x-text="stats.uiStrings?.BADGE_NEW || 'Baru'"></span>
+                                            <span x-text="file.name" class="font-medium truncate"></span>
                                         </div>
                                     </td>
                                     <td class="py-3 px-4 text-muted whitespace-nowrap text-center" x-text="file.category"></td>
