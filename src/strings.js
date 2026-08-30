@@ -4,7 +4,7 @@
 module.exports = {
     // Teks untuk Dashboard
     DASHBOARD: {
-        ACTIVITY_TITLE: "Log Aktivitas Terakhir",
+        ACTIVITY_TITLE: "Log Aktivitas",
         ACTIVITY_SUBTITLE: "5 File terakhir yang baru saja diunggah ke cloud",
         TABLE_NO: "NO",
         TABLE_FILE: "Nama File",
