@@ -48,6 +48,24 @@ function startDashboard(port = 3000) {
           console.error("[ERROR] Gagal membaca disk:", err.message);
       }
 
+      // Ambil 5 File Terakhir untuk Activity Log
+      let recentFiles = [];
+      if (filesRes.success && filesRes.data) {
+          recentFiles = [...filesRes.data]
+              .sort((a, b) => b.createdAt - a.createdAt)
+              .slice(0, 5)
+              .map(file => {
+                  const strings = require('../strings');
+                  const fileName = file.fileName || file.name || 'Unknown File';
+                  return {
+                      name: fileName,
+                      category: strings.getCategoryText(fileName, file.type),
+                      label: file.label || '-',
+                      time: file.createdAt
+                  };
+              });
+      }
+
       const stats = {
         hostname: os.hostname(),
         uptime: os.uptime(), 
@@ -66,7 +84,9 @@ function startDashboard(port = 3000) {
           totalGames,
           totalAccounts,
           totalFiles
-        }
+        },
+        recentActivity: recentFiles,
+        uiStrings: require('../strings').DASHBOARD
       };
       res.json({ success: true, data: stats });
     } catch (e) {

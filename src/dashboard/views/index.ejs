@@ -120,6 +120,51 @@
                 </div>
 
             </div>
+
+            <!-- Activity Log Section -->
+            <div class="mt-5 card flex flex-col">
+                <div class="flex items-center justify-between border-b border-line pb-4 mb-4">
+                    <div>
+                        <h2 class="text-white font-display font-semibold text-lg" x-text="stats.uiStrings?.ACTIVITY_TITLE || 'Log Aktivitas'"></h2>
+                        <p class="text-muted text-xs mt-1" x-text="stats.uiStrings?.ACTIVITY_SUBTITLE || '5 File terakhir yang diunggah'"></p>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="text-muted font-mono text-[11px] uppercase tracking-widest border-b border-line">
+                                <th class="pb-3 pr-4 font-medium" x-text="stats.uiStrings?.TABLE_FILE || 'Nama File'"></th>
+                                <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_CATEGORY || 'Kategori'"></th>
+                                <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_LABEL || 'Label'"></th>
+                                <th class="pb-3 pl-4 font-medium text-right" x-text="stats.uiStrings?.TABLE_TIME || 'Waktu'"></th>
+                            </tr>
+                        </thead>
+                        <tbody class="text-sm">
+                            <template x-if="!stats.recentActivity || stats.recentActivity.length === 0">
+                                <tr>
+                                    <td colspan="4" class="py-6 text-center text-muted text-xs" x-text="stats.uiStrings?.NO_ACTIVITY || 'Belum ada aktivitas.'"></td>
+                                </tr>
+                            </template>
+                            <template x-for="(file, index) in stats.recentActivity" :key="index">
+                                <tr class="border-b border-line/50 hover:bg-white/[0.02] transition-colors group">
+                                    <td class="py-3 pr-4 text-ink truncate max-w-[200px]" :title="file.name">
+                                        <div class="flex items-center gap-2">
+                                            <span x-show="index === 0" class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-accent/20 text-accent uppercase tracking-wider" x-text="stats.uiStrings?.BADGE_NEW || 'Baru'"></span>
+                                            <span x-text="file.name" class="font-medium"></span>
+                                        </div>
+                                    </td>
+                                    <td class="py-3 px-4 text-muted whitespace-nowrap" x-text="file.category"></td>
+                                    <td class="py-3 px-4">
+                                        <span class="px-2 py-1 rounded bg-panel2 border border-line text-xs text-muted truncate max-w-[100px] inline-block" :title="file.label" x-text="file.label"></span>
+                                    </td>
+                                    <td class="py-3 pl-4 text-right whitespace-nowrap text-muted text-xs font-mono" x-text="formatTimeAgo(file.time)"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </main>
 
         <%- include('components/footer') %>

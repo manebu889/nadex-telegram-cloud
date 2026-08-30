@@ -87,6 +87,19 @@
                     return [h, m, s]
                         .map(v => v.toString().padStart(2, '0'))
                         .join(':');
+                },
+
+                formatTimeAgo(timestamp) {
+                    if (!timestamp) return '-';
+                    const diff = Date.now() - timestamp;
+                    const minute = 60 * 1000;
+                    const hour = minute * 60;
+                    const day = hour * 24;
+
+                    if (diff < minute) return 'Baru saja';
+                    if (diff < hour) return Math.floor(diff / minute) + ' mnt lalu';
+                    if (diff < day) return Math.floor(diff / hour) + ' jam lalu';
+                    return Math.floor(diff / day) + ' hari lalu';
                 }
             }))
         })
