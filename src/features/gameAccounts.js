@@ -152,9 +152,13 @@ module.exports = (bot) => {
       
       await ctx.editMessageText(text, { parse_mode: 'Markdown' }).catch(()=>{});
       
-      setTimeout(() => {
-        if (ctx.callbackQuery && ctx.callbackQuery.message) {
-          ctx.telegram.deleteMessage(ctx.chat.id, ctx.callbackQuery.message.message_id).catch(() => {});
+      setTimeout(async () => {
+        try {
+          if (ctx.callbackQuery && ctx.callbackQuery.message) {
+            await ctx.deleteMessage();
+          }
+        } catch (err) {
+          console.error("⚠️ Gagal menghapus pesan akun otomatis (25 detik):", err.message);
         }
       }, 25000);
     } catch(e) {
