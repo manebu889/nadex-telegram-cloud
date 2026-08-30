@@ -141,6 +141,11 @@
                     <div class="flex flex-col justify-between h-full">
                         <span class="text-muted font-mono text-[11px] uppercase tracking-widest">Resources Usage</span>
 
+                        <!-- <div>
+                            <div class="font-display font-semibold text-3xl text-white num-flicker"
+                                x-text="stats.hostname">Device</div>
+                        </div> -->
+
                         <div class="mt-2 space-y-2">
                             <!-- Info RAM -->
                             <div class="font-mono text-xs text-muted flex items-center gap-2">
@@ -262,6 +267,7 @@
                 serverStartTime: null,
                 displayUptime: 0,
                 stats: {
+                    hostname: 'Menunggu...',
                     uptime: 0,
                     memory: { percent: '0', used: '0', total: '0' },
                     database: { totalGames: 0, totalAccounts: 0, totalFiles: 0 }

@@ -47,6 +47,7 @@ function startDashboard(port = 3000) {
       }
 
       const stats = {
+        // hostname: os.hostname(),
         uptime: os.uptime(), 
         botStatus: 'Online', 
         memory: {
