@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nadex Cloud Bot — Monitoring</title>
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <!-- Fonts: Space Grotesk (display) / Inter (body) / JetBrains Mono (data) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        void: '#080b12',
+                        panel: '#0e1420',
+                        panel2: '#121a29',
+                        line: '#1c2536',
+                        accent: '#5eead4',
+                        accent2: '#818cf8',
+                        good: '#34d399',
+                        bad: '#f87171',
+                        warn: '#fbbf24',
+                        ink: '#e6ebf5',
+                        muted: '#7c8aa5',
+                    },
+                    fontFamily: {
+                        display: ['"Space Grotesk"', 'sans-serif'],
+                        body: ['"Inter"', 'sans-serif'],
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+
+    <style type="text/tailwindcss">
+        @layer components {
+            .card {
+                @apply relative overflow-hidden bg-panel border border-line rounded-2xl p-4 sm:p-6 h-full w-full;
+                transition: border-color .3s ease, transform .3s ease, box-shadow .3s ease;
+            }
+            .card:hover {
+                transform: translateY(-3px);
+                border-color: rgba(94, 234, 212, 0.35);
+            }
+        }
+        body {
+            background-color: #080b12;
+            background-image:
+                radial-gradient(circle at 1px 1px, rgba(255,255,255,0.045) 1px, transparent 0);
+            background-size: 28px 28px;
+        }
+        .glow-border {
+            box-shadow: 0 0 0 1px rgba(255,255,255,0.03), 0 20px 40px -20px rgba(0,0,0,0.6);
+        }
+        .num-flicker {
+            font-variant-numeric: tabular-nums;
+        }
+        @keyframes sweep {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+        .sweep::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(90deg, transparent, rgba(94,234,212,0.08), transparent);
+            animation: sweep 3.5s linear infinite;
+        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-thumb { background: #1c2536; border-radius: 4px; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .sweep::after, .animate-pulse, .animate-ping { animation: none !important; }
+        }
+    </style>
+</head>
+
+<body class="text-ink font-body antialiased min-h-screen flex flex-col">

@@ -7,11 +7,13 @@ const config = require('../config');
 function startDashboard(port = 3000) {
   const app = express();
 
+  app.set('view engine', 'ejs');
+  app.set('views', path.join(__dirname, 'views'));
   app.use('/assets', express.static(path.join(__dirname, 'assets')));
   
-  // Serve the HTML file
+  // Serve the dashboard
   app.get('/', (req, res) => {
-    res.sendFile(path.join(__dirname, 'index.html'));
+    res.render('index');
   });
 
   // API endpoint for dashboard to fetch stats

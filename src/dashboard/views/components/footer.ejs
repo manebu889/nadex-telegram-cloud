@@ -1,0 +1,95 @@
+        <!-- ===== Footer ===== -->
+        <footer
+            class="mt-10 pt-6 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-3 text-xs shrink-0">
+            <p class="text-muted font-mono">NADEX CLOUD STORAGE</p>
+            <p class="text-muted font-mono">
+                Server Uptime:
+                <span class="text-ink" x-text="formatUptimeDigital(displayUptime)">Belum sinkron</span>
+            </p>
+        </footer>
+
+    </div>
+
+    <!-- Alpine Component Logic -->
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('dashboard', () => ({
+                isOnline: false,
+                lastUpdate: '-',
+                serverStartTime: null,
+                displayUptime: 0,
+                stats: {
+                    hostname: 'Menunggu...',
+                    uptime: 0,
+                    memory: { percent: '0', used: '0', total: '0' },
+                    database: { totalGames: 0, totalAccounts: 0, totalFiles: 0 }
+                },
+
+                async fetchData() {
+                    try {
+                        const response = await fetch('/api/stats');
+                        const result = await response.json();
+
+                        if (result.success) {
+                            this.stats = result.data;
+                            this.isOnline = true;
+
+                            if (!this.serverStartTime || this.displayUptime === 0) {
+                                this.serverStartTime = Date.now() - (this.stats.uptime * 1000);
+                            }
+
+                            const now = new Date();
+                            this.lastUpdate = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                        } else {
+                            this.isOnline = false;
+                        }
+                    } catch (error) {
+                        console.error('Fetch error:', error);
+                        this.isOnline = false;
+                    }
+                },
+
+                startPolling() {
+                    this.fetchData();
+
+                    setInterval(() => {
+                        this.fetchData();
+                    }, 5000);
+
+                    setInterval(() => {
+                        if (this.isOnline && this.serverStartTime) {
+                            this.displayUptime = Math.floor((Date.now() - this.serverStartTime) / 1000);
+                        }
+                    }, 1000);
+                },
+
+                formatUptime(seconds) {
+                    if (!seconds) return '0s';
+                    const d = Math.floor(seconds / (3600 * 24));
+                    const h = Math.floor(seconds % (3600 * 24) / 3600);
+                    const m = Math.floor(seconds % 3600 / 60);
+                    const s = Math.floor(seconds % 60);
+
+                    const parts = [];
+                    if (d > 0) parts.push(`${d}d`);
+                    if (h > 0) parts.push(`${h}h`);
+                    if (m > 0) parts.push(`${m}m`);
+                    parts.push(`${s}s`);
+                    return parts.join(' ');
+                },
+
+                formatUptimeDigital(seconds) {
+                    if (!seconds) return '00:00:00';
+                    const h = Math.floor(seconds / 3600);
+                    const m = Math.floor((seconds % 3600) / 60);
+                    const s = Math.floor(seconds % 60);
+
+                    return [h, m, s]
+                        .map(v => v.toString().padStart(2, '0'))
+                        .join(':');
+                }
+            }))
+        })
+    </script>
+</body>
+</html>
