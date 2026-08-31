@@ -56,16 +56,21 @@ module.exports = (bot) => {
 
       let fileId, originalFileName = '', fileType = '';
 
+      let fileSize = 0;
+
       if (msg.document) {
         fileId = msg.document.file_id;
         originalFileName = msg.document.file_name;
+        fileSize = msg.document.file_size || 0;
         fileType = 'document';
       } else if (msg.photo) {
         fileId = msg.photo[msg.photo.length - 1].file_id;
+        fileSize = msg.photo[msg.photo.length - 1].file_size || 0;
         originalFileName = `photo_${msg.message_id}.jpg`; 
         fileType = 'photo';
       } else if (msg.video) {
         fileId = msg.video.file_id;
+        fileSize = msg.video.file_size || 0;
         originalFileName = msg.video.file_name || `video_${msg.message_id}.mp4`;
         fileType = 'video';
       }
@@ -111,7 +116,7 @@ module.exports = (bot) => {
             message_thread_id: targetTopicId
           }));
           
-          await saveDB({ fileId, fileName, type: fileType, label, topicId: targetTopicId, topicMsgId: copiedMsg.message_id });
+          await saveDB({ fileId, fileName, type: fileType, label, size: fileSize, topicId: targetTopicId, topicMsgId: copiedMsg.message_id });
 
           await ctx.telegram.deleteMessage(config.CHAT_ID, msg.message_id).catch(()=>{});
           
@@ -127,7 +132,7 @@ module.exports = (bot) => {
           }
         }
       } else {
-        await saveDB({ fileId, fileName, type: fileType, label, topicId: threadId, topicMsgId: msg.message_id });
+        await saveDB({ fileId, fileName, type: fileType, label, size: fileSize, topicId: threadId, topicMsgId: msg.message_id });
 
         if (!msg.media_group_id || (msg.media_group_id && msg.caption)) {
           const replyOpts = { reply_to_message_id: msg.message_id };

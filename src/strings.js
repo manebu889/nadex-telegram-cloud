@@ -10,6 +10,7 @@ module.exports = {
         TABLE_FILE: "Nama File",
         TABLE_CATEGORY: "Kategori",
         TABLE_LABEL: "Label / Topik",
+        TABLE_SIZE: "Ukuran",
         TABLE_TIME: "Waktu",
         NO_ACTIVITY: "Belum ada aktivitas file terbaru.",
         

@@ -61,6 +61,7 @@ function startDashboard(port = 3000) {
                       name: fileName,
                       category: strings.getCategoryText(fileName, file.type),
                       label: file.label || '-',
+                      size: file.size || 0,
                       time: file.createdAt
                   };
               });

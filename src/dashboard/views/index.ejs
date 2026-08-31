@@ -138,13 +138,14 @@
                                 <th class="pb-3 px-4 font-medium " x-text="stats.uiStrings?.TABLE_FILE || 'Nama File'"></th>
                                 <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_CATEGORY || 'Kategori'"></th>
                                 <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_LABEL || 'Label'"></th>
+                                <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_SIZE || 'Ukuran'"></th>
                                 <th class="pb-3 px-4 font-medium" x-text="stats.uiStrings?.TABLE_TIME || 'Waktu'"></th>
                             </tr>
                         </thead>
                         <tbody class="text-sm">
                             <template x-if="!stats.recentActivity || stats.recentActivity.length === 0">
                                 <tr>
-                                    <td colspan="5" class="py-6 text-center text-muted text-xs" x-text="stats.uiStrings?.NO_ACTIVITY || 'Belum ada aktivitas.'"></td>
+                                    <td colspan="6" class="py-6 text-center text-muted text-xs" x-text="stats.uiStrings?.NO_ACTIVITY || 'Belum ada aktivitas.'"></td>
                                 </tr>
                             </template>
                             <template x-for="(file, index) in stats.recentActivity" :key="index">
@@ -160,6 +161,7 @@
                                     <td class="py-3 px-4 text-center">
                                         <span class="px-2 py-1 rounded bg-panel2 border border-line text-xs text-muted truncate max-w-[100px] inline-block" :title="file.label" x-text="file.label"></span>
                                     </td>
+                                    <td class="py-3 px-4 text-center text-muted font-mono text-xs whitespace-nowrap" x-text="formatBytes(file.size)"></td>
                                     <td class="py-3 px-4 text-center whitespace-nowrap text-muted text-xs font-mono" x-text="formatTimeAgo(file.time)"></td>
                                 </tr>
                             </template>
